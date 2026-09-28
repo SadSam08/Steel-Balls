@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus,
   Trash2,
@@ -33,6 +33,128 @@ interface WorkoutLogViewProps {
   onAddCustomExercise: (name: string, isBodyweight: boolean) => Promise<CustomExercise>;
   onError: (msg: string) => void;
 }
+
+interface SetRowItemProps {
+  set: SetItem;
+  idx: number;
+  onUpdateSet: (setId: string, updates: Partial<SetItem>) => Promise<void>;
+  onDeleteSet: (setId: string) => Promise<void>;
+}
+
+const SetRowItem: React.FC<SetRowItemProps> = ({
+  set,
+  idx,
+  onUpdateSet,
+  onDeleteSet,
+}) => {
+  const [weightStr, setWeightStr] = useState<string>(String(set.weight));
+  const [repsStr, setRepsStr] = useState<string>(String(set.reps));
+
+  useEffect(() => {
+    setWeightStr(String(set.weight));
+  }, [set.weight]);
+
+  useEffect(() => {
+    setRepsStr(String(set.reps));
+  }, [set.reps]);
+
+  const commitWeight = () => {
+    const trimmed = weightStr.trim();
+    if (trimmed === '') {
+      setWeightStr(String(set.weight));
+      return;
+    }
+    const parsed = parseFloat(trimmed);
+    if (isNaN(parsed) || parsed < 0) {
+      setWeightStr(String(set.weight));
+      return;
+    }
+    if (parsed !== set.weight) {
+      onUpdateSet(set.id, { weight: parsed });
+    }
+  };
+
+  const commitReps = () => {
+    const trimmed = repsStr.trim();
+    if (trimmed === '') {
+      setRepsStr(String(set.reps));
+      return;
+    }
+    const parsed = parseInt(trimmed, 10);
+    if (isNaN(parsed) || parsed < 1) {
+      setRepsStr(String(set.reps));
+      return;
+    }
+    if (parsed !== set.reps) {
+      onUpdateSet(set.id, { reps: parsed });
+    }
+  };
+
+  return (
+    <div
+      className={`grid grid-cols-12 gap-2 items-center p-2 rounded-xl transition ${
+        set.isPR ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-slate-900/60'
+      }`}
+    >
+      {/* Set Index */}
+      <div className="col-span-2 text-center font-bold text-slate-300 text-xs">
+        {idx + 1}
+      </div>
+
+      {/* Weight Input */}
+      <div className="col-span-4">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={weightStr}
+          onChange={(e) => setWeightStr(e.target.value)}
+          onBlur={commitWeight}
+          onFocus={(e) => e.target.select()}
+          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-semibold text-xs text-center focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+        />
+      </div>
+
+      {/* Reps Input */}
+      <div className="col-span-3">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={repsStr}
+          onChange={(e) => setRepsStr(e.target.value)}
+          onBlur={commitReps}
+          onFocus={(e) => e.target.select()}
+          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-semibold text-xs text-center focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+        />
+      </div>
+
+      {/* PR Toggle Trophy */}
+      <div className="col-span-1 flex justify-center">
+        <button
+          onClick={() => onUpdateSet(set.id, { isPR: !set.isPR })}
+          className={`p-1.5 rounded-lg transition active:scale-125 ${
+            set.isPR
+              ? 'text-amber-400 bg-amber-400/20'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+          title={set.isPR ? 'Marked as PR' : 'Click to flag PR'}
+        >
+          <Trophy size={16} fill={set.isPR ? 'currentColor' : 'none'} />
+        </button>
+      </div>
+
+      {/* Delete Set */}
+      <div className="col-span-2 flex justify-end">
+        <button
+          onClick={() => onDeleteSet(set.id)}
+          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 transition"
+          aria-label="Delete set"
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
   selectedDate,
@@ -336,70 +458,13 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
               </div>
 
               {group.sets.map((set, idx) => (
-                <div
+                <SetRowItem
                   key={set.id}
-                  className={`grid grid-cols-12 gap-2 items-center p-2 rounded-xl transition ${
-                    set.isPR ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-slate-900/60'
-                  }`}
-                >
-                  {/* Set Index */}
-                  <div className="col-span-2 text-center font-bold text-slate-300 text-xs">
-                    {idx + 1}
-                  </div>
-
-                  {/* Weight Input */}
-                  <div className="col-span-4">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      value={set.weight}
-                      onChange={(e) =>
-                        onUpdateSet(set.id, { weight: parseFloat(e.target.value) || 0 })
-                      }
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-semibold text-xs text-center focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Reps Input */}
-                  <div className="col-span-3">
-                    <input
-                      type="number"
-                      min="1"
-                      value={set.reps}
-                      onChange={(e) =>
-                        onUpdateSet(set.id, { reps: parseInt(e.target.value, 10) || 1 })
-                      }
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-semibold text-xs text-center focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* PR Toggle Trophy */}
-                  <div className="col-span-1 flex justify-center">
-                    <button
-                      onClick={() => onUpdateSet(set.id, { isPR: !set.isPR })}
-                      className={`p-1.5 rounded-lg transition active:scale-125 ${
-                        set.isPR
-                          ? 'text-amber-400 bg-amber-400/20'
-                          : 'text-slate-500 hover:text-slate-300'
-                      }`}
-                      title={set.isPR ? 'Marked as PR' : 'Click to flag PR'}
-                    >
-                      <Trophy size={16} fill={set.isPR ? 'currentColor' : 'none'} />
-                    </button>
-                  </div>
-
-                  {/* Delete Set */}
-                  <div className="col-span-2 flex justify-end">
-                    <button
-                      onClick={() => onDeleteSet(set.id)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 transition"
-                      aria-label="Delete set"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
+                  set={set}
+                  idx={idx}
+                  onUpdateSet={onUpdateSet}
+                  onDeleteSet={onDeleteSet}
+                />
               ))}
             </div>
 

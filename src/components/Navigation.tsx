@@ -1,7 +1,7 @@
 import React from 'react';
-import { Calendar as CalendarIcon, Dumbbell, Trophy, User } from 'lucide-react';
+import { Calendar as CalendarIcon, Dumbbell, Trophy } from 'lucide-react';
 
-export type TabType = 'calendar' | 'workout' | 'prs' | 'profile';
+export type TabType = 'calendar' | 'workout' | 'prs';
 
 interface NavigationProps {
   activeTab: TabType;
@@ -13,7 +13,6 @@ export const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }
     { id: 'calendar' as TabType, label: 'Calendar', icon: CalendarIcon },
     { id: 'workout' as TabType, label: 'Workout', icon: Dumbbell },
     { id: 'prs' as TabType, label: 'PRs', icon: Trophy },
-    { id: 'profile' as TabType, label: 'Profile', icon: User },
   ];
 
   return (

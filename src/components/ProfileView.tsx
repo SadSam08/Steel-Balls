@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   LogOut,
@@ -33,11 +33,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onDeleteAccount,
   onError,
 }) => {
-  const [height, setHeight] = useState(profile.height);
-  const [bodyweight, setBodyweight] = useState(profile.bodyweight);
-  const [age, setAge] = useState(profile.age);
+  const [heightStr, setHeightStr] = useState<string>(String(profile.height));
+  const [bodyweightStr, setBodyweightStr] = useState<string>(String(profile.bodyweight));
+  const [ageStr, setAgeStr] = useState<string>(String(profile.age));
   const [gender, setGender] = useState(profile.gender);
   const [unit, setUnit] = useState(profile.unit);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -45,13 +46,39 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [requiresReauthPass, setRequiresReauthPass] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  useEffect(() => {
+    setHeightStr(String(profile.height));
+    setBodyweightStr(String(profile.bodyweight));
+    setAgeStr(String(profile.age));
+    setGender(profile.gender);
+    setUnit(profile.unit);
+  }, [profile]);
+
   const handleSaveProfile = async () => {
+    const h = parseFloat(heightStr.trim());
+    const bw = parseFloat(bodyweightStr.trim());
+    const a = parseInt(ageStr.trim(), 10);
+
+    if (heightStr.trim() === '' || isNaN(h) || h <= 0) {
+      setFormError('Please enter a valid height greater than 0.');
+      return;
+    }
+    if (bodyweightStr.trim() === '' || isNaN(bw) || bw <= 0) {
+      setFormError('Please enter a valid bodyweight greater than 0.');
+      return;
+    }
+    if (ageStr.trim() === '' || isNaN(a) || a <= 0) {
+      setFormError('Please enter a valid age greater than 0.');
+      return;
+    }
+
+    setFormError(null);
     setIsSaving(true);
     try {
       await onUpdateProfile({
-        height: Number(height),
-        bodyweight: Number(bodyweight),
-        age: Number(age),
+        height: h,
+        bodyweight: bw,
+        age: a,
         gender,
         unit,
       });
@@ -79,7 +106,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full space-y-6 shadow-2xl animate-in fade-in zoom-in-95">
+    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full space-y-6 shadow-2xl animate-in fade-in zoom-in-95 font-['Outfit',sans-serif]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-4">
         <div className="flex items-center gap-3">
@@ -93,6 +120,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </div>
 
+      {/* Inline Form Validation Error */}
+      {formError && (
+        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold">
+          {formError}
+        </div>
+      )}
+
       {/* Profile Inputs */}
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
@@ -101,9 +135,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <Ruler size={13} className="text-cyan-400" /> Height (cm)
             </label>
             <input
-              type="number"
-              value={height}
-              onChange={(e) => setHeight(parseFloat(e.target.value) || 0)}
+              type="text"
+              inputMode="numeric"
+              value={heightStr}
+              onChange={(e) => {
+                setFormError(null);
+                setHeightStr(e.target.value);
+              }}
+              onFocus={(e) => e.target.select()}
               className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none"
             />
           </div>
@@ -113,10 +152,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <Scale size={13} className="text-cyan-400" /> Bodyweight ({unit})
             </label>
             <input
-              type="number"
-              step="0.1"
-              value={bodyweight}
-              onChange={(e) => setBodyweight(parseFloat(e.target.value) || 0)}
+              type="text"
+              inputMode="decimal"
+              value={bodyweightStr}
+              onChange={(e) => {
+                setFormError(null);
+                setBodyweightStr(e.target.value);
+              }}
+              onFocus={(e) => e.target.select()}
               className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none"
             />
           </div>
@@ -126,9 +169,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div>
             <label className="text-xs font-semibold text-slate-300 block mb-1">Age</label>
             <input
-              type="number"
-              value={age}
-              onChange={(e) => setAge(parseInt(e.target.value, 10) || 0)}
+              type="text"
+              inputMode="numeric"
+              value={ageStr}
+              onChange={(e) => {
+                setFormError(null);
+                setAgeStr(e.target.value);
+              }}
+              onFocus={(e) => e.target.select()}
               className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none"
             />
           </div>

@@ -27,7 +27,6 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { CalendarView } from './components/CalendarView';
 import { WorkoutLogView } from './components/WorkoutLogView';
 import { PRTab } from './components/PRTab';
-import { ProfileView } from './components/ProfileView';
 import { ProfileModal } from './components/ProfileModal';
 import { AuthScreen } from './components/AuthScreen';
 import { Toast } from './components/Toast';
@@ -267,18 +266,6 @@ export function App() {
             allSets={allSets}
             userProfile={userProfile}
             onUpdateSet={handleUpdateSet}
-            onError={(msg) => showToast('error', msg)}
-          />
-        )}
-
-        {activeTab === 'profile' && (
-          <ProfileView
-            userEmail={currentUser.email}
-            profile={userProfile}
-            bodyweightLogs={bodyweightLogs}
-            onUpdateProfile={handleUpdateProfile}
-            onLogout={handleLogout}
-            onDeleteAccount={handleDeleteAccount}
             onError={(msg) => showToast('error', msg)}
           />
         )}
