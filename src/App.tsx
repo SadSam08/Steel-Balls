@@ -27,16 +27,15 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { CalendarView } from './components/CalendarView';
 import { WorkoutLogView } from './components/WorkoutLogView';
 import { PRTab } from './components/PRTab';
+import { ProfileView } from './components/ProfileView';
 import { ProfileModal } from './components/ProfileModal';
+import { AuthScreen } from './components/AuthScreen';
 import { Toast } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-
-  // Active user fallback (direct access mode)
-  const activeUser = currentUser || { uid: 'default_user', email: 'sammmm' };
 
   // App Data State
   const [allSets, setAllSets] = useState<SetItem[]>([]);
@@ -88,7 +87,8 @@ export function App() {
 
   // Real-time Firestore / Local Data Listeners
   useEffect(() => {
-    const uid = activeUser.uid;
+    if (!currentUser) return;
+    const uid = currentUser.uid;
 
     const unsubSets = subscribeToUserSets(
       uid,
@@ -110,8 +110,9 @@ export function App() {
       unsubProfile();
       unsubBwLogs();
     };
-  }, [activeUser.uid]);
+  }, [currentUser]);
 
+  // If Auth is checking user session state
   if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-300 flex items-center justify-center font-bold text-sm">
@@ -120,6 +121,20 @@ export function App() {
           <span>Loading Steel Balls...</span>
         </div>
       </div>
+    );
+  }
+
+  // Requirement 3: If logged out, show ONLY the login screen
+  if (!currentUser) {
+    return (
+      <>
+        <OfflineIndicator />
+        <Toast toast={toast} onClose={() => setToast(null)} />
+        <AuthScreen
+          onError={(msg) => showToast('error', msg)}
+          onSuccess={(msg) => showToast('success', msg)}
+        />
+      </>
     );
   }
 
@@ -141,7 +156,7 @@ export function App() {
     isPR: boolean
   ) => {
     try {
-      await addWorkoutSet(activeUser.uid, {
+      await addWorkoutSet(currentUser.uid, {
         date: selectedDate,
         exerciseId,
         exerciseName,
@@ -152,7 +167,7 @@ export function App() {
         isPR,
         createdAt: Date.now(),
       });
-    } catch (err: any) {
+    } catch {
       showToast('error', 'Failed to add set. Click to retry.', () =>
         handleAddSet(exerciseId, exerciseName, isBodyweight, weight, reps, isPR)
       );
@@ -161,48 +176,49 @@ export function App() {
 
   const handleUpdateSet = async (setId: string, updates: Partial<SetItem>) => {
     try {
-      await updateWorkoutSet(activeUser.uid, setId, updates);
-    } catch (err: any) {
+      await updateWorkoutSet(currentUser.uid, setId, updates);
+    } catch {
       showToast('error', 'Failed to update set.');
     }
   };
 
   const handleDeleteSet = async (setId: string) => {
     try {
-      await deleteWorkoutSet(activeUser.uid, setId);
-    } catch (err: any) {
+      await deleteWorkoutSet(currentUser.uid, setId);
+    } catch {
       showToast('error', 'Failed to delete set.');
     }
   };
 
   const handleDeleteExerciseFromDate = async (exerciseId: string) => {
     try {
-      await deleteExerciseSetsFromDate(activeUser.uid, exerciseId, selectedDate);
+      await deleteExerciseSetsFromDate(currentUser.uid, exerciseId, selectedDate);
       showToast('success', 'Exercise removed from date.');
-    } catch (err: any) {
+    } catch {
       showToast('error', 'Failed to delete exercise sets.');
     }
   };
 
   const handleAddCustomExercise = async (name: string, isBodyweight: boolean) => {
-    return await createCustomExercise(activeUser.uid, name, isBodyweight);
+    return await createCustomExercise(currentUser.uid, name, isBodyweight);
   };
 
   const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
-    await updateUserProfile(activeUser.uid, updates, userProfile);
+    await updateUserProfile(currentUser.uid, updates, userProfile);
     showToast('success', 'Profile updated!');
   };
 
   const handleLogout = async () => {
     await logoutUser();
-    showToast('success', 'Session reset.');
+    setIsProfileOpen(false);
+    showToast('success', 'Logged out successfully.');
   };
 
   const handleDeleteAccount = async (reauthPassword?: string) => {
     await deleteAccountAndAllData(reauthPassword);
-    showToast('success', 'Data reset.');
+    setIsProfileOpen(false);
+    showToast('success', 'Account and data reset.');
   };
-
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Outfit',sans-serif]">
@@ -215,12 +231,12 @@ export function App() {
       {/* Top Header */}
       <Header
         profile={userProfile}
-        userEmail={activeUser.email}
+        userEmail={currentUser.email}
         onOpenProfile={() => setIsProfileOpen(true)}
       />
 
       {/* Main Tab Content View */}
-      <main className="flex-1 max-w-md w-full mx-auto p-4">
+      <main className="flex-1 max-w-md w-full mx-auto p-4 pb-20">
         {activeTab === 'calendar' && (
           <CalendarView
             allSets={allSets}
@@ -254,22 +270,33 @@ export function App() {
             onError={(msg) => showToast('error', msg)}
           />
         )}
+
+        {activeTab === 'profile' && (
+          <ProfileView
+            userEmail={currentUser.email}
+            profile={userProfile}
+            bodyweightLogs={bodyweightLogs}
+            onUpdateProfile={handleUpdateProfile}
+            onLogout={handleLogout}
+            onDeleteAccount={handleDeleteAccount}
+            onError={(msg) => showToast('error', msg)}
+          />
+        )}
       </main>
 
       {/* Bottom Navigation */}
       <Navigation activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab)} />
 
-      {/* Profile Modal */}
+      {/* Profile Modal (Opened via Header Profile Icon) */}
       <ProfileModal
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
-        userEmail={activeUser.email}
+        userEmail={currentUser.email}
         profile={userProfile}
         bodyweightLogs={bodyweightLogs}
         onUpdateProfile={handleUpdateProfile}
         onLogout={handleLogout}
         onDeleteAccount={handleDeleteAccount}
-
         onError={(msg) => showToast('error', msg)}
       />
     </div>
