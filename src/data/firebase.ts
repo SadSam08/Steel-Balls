@@ -8,12 +8,12 @@ import {
 } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyCf2sFkkmrHSkjZrdGHEOhXON5e85Jq_4g',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'steel-balls.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'steel-balls',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'steel-balls.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '743653954100',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:743653954100:web:7ff4868ce23bdc62a77061',
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
