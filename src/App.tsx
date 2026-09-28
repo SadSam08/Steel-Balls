@@ -265,8 +265,16 @@ export function App() {
           <PRTab
             allSets={allSets}
             userProfile={userProfile}
+            customExercises={customExercises}
+            bodyweightLogs={bodyweightLogs}
+            onAddSet={async (setData) => {
+              await addWorkoutSet(currentUser.uid, setData);
+            }}
             onUpdateSet={handleUpdateSet}
+            onDeleteSet={handleDeleteSet}
+            onAddCustomExercise={handleAddCustomExercise}
             onError={(msg) => showToast('error', msg)}
+            onSuccess={(msg) => showToast('success', msg)}
           />
         )}
       </main>
