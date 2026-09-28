@@ -9,6 +9,9 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      devOptions: {
+        enabled: false,
+      },
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Steel Balls',
