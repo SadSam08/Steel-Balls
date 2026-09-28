@@ -54,11 +54,23 @@ export function App() {
 
   // Auth State Listener - strictly powered by real Firebase Authentication
   useEffect(() => {
+    let isMounted = true;
+    const timeout = setTimeout(() => {
+      if (isMounted) setIsAuthLoading(false);
+    }, 2000);
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!isMounted) return;
+      clearTimeout(timeout);
       setCurrentUser(user);
       setIsAuthLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeout);
+      unsubscribe();
+    };
   }, []);
 
   // Real-time Firestore / Local Data Listeners
