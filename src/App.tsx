@@ -36,7 +36,7 @@ export function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // Active user fallback (direct access mode)
-  const activeUser = currentUser || { uid: 'default_user', email: 'athlete@liftpulse.app' };
+  const activeUser = currentUser || { uid: 'default_user', email: 'sammmm' };
 
   // App Data State
   const [allSets, setAllSets] = useState<SetItem[]>([]);

@@ -52,7 +52,7 @@ export async function loginWithEmail(email: string, pass: string): Promise<any> 
 
 export async function loginWithGoogle(): Promise<any> {
   if (isDemoConfig) {
-    const demoUser = { uid: 'demo_user_123', email: 'athlete@example.com' };
+    const demoUser = { uid: 'demo_user_123', email: 'sammmm' };
     localStorage.setItem(DEMO_USER_KEY, JSON.stringify(demoUser));
     window.dispatchEvent(new Event('demo-auth-changed'));
     return demoUser;
