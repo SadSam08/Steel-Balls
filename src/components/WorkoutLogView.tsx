@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Plus,
   Trash2,
-  Star,
+  Trophy,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -374,7 +374,7 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                     />
                   </div>
 
-                  {/* PR Toggle Star */}
+                  {/* PR Toggle Trophy */}
                   <div className="col-span-1 flex justify-center">
                     <button
                       onClick={() => onUpdateSet(set.id, { isPR: !set.isPR })}
@@ -385,7 +385,7 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                       }`}
                       title={set.isPR ? 'Marked as PR' : 'Click to flag PR'}
                     >
-                      <Star size={16} fill={set.isPR ? 'currentColor' : 'none'} />
+                      <Trophy size={16} fill={set.isPR ? 'currentColor' : 'none'} />
                     </button>
                   </div>
 

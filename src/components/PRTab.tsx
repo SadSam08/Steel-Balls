@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Award,
+  Trophy,
   History,
   TrendingUp,
   Sparkles,
   X,
-  Star,
   ChevronRight,
   Info,
   Calendar,
@@ -144,7 +143,7 @@ export const PRTab: React.FC<PRTabProps> = ({
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Award size={16} /> Current PRs
+          <Trophy size={16} /> Current PRs
         </button>
         <button
           onClick={() => setPrView('history')}
@@ -193,10 +192,10 @@ export const PRTab: React.FC<PRTabProps> = ({
         <div className="space-y-3">
           {currentPRs.length === 0 ? (
             <div className="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-8 text-center space-y-3">
-              <Award className="w-12 h-12 text-slate-500 mx-auto" />
+              <Trophy className="w-12 h-12 text-slate-500 mx-auto" />
               <h3 className="text-sm font-semibold text-slate-300">No PRs marked yet</h3>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                Toggle the star icon on any set in your Workout Log, or use "Auto-Find PR" above.
+                Toggle the trophy icon on any set in your Workout Log, or use "Auto-Find PR" above.
               </p>
             </div>
           ) : (
@@ -264,7 +263,7 @@ export const PRTab: React.FC<PRTabProps> = ({
                 className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3"
               >
                 <h4 className="text-sm font-bold text-white border-b border-slate-700/60 pb-2 flex items-center gap-2">
-                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                  <Trophy className="w-4 h-4 text-amber-400 fill-amber-400" />
                   {grp.exerciseName}
                 </h4>
 
