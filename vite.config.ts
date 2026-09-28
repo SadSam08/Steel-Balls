@@ -12,8 +12,11 @@ export default defineConfig({
       devOptions: {
         enabled: false,
       },
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
       manifest: {
+        id: '/',
+        scope: '/',
+        start_url: '/',
         name: 'Steel Balls',
         short_name: 'Steel Balls',
         description: 'Steel Balls - Mobile-first PWA workout tracker with offline Firestore & PR analytics',
@@ -25,7 +28,8 @@ export default defineConfig({
           {
             src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
             src: 'pwa-512x512.png',
