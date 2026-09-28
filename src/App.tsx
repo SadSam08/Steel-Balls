@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { auth, isDemoConfig } from './data/firebase';
+import { auth } from './data/firebase';
 import {
   subscribeToUserSets,
   subscribeToCustomExercises,
@@ -16,7 +16,7 @@ import {
   subscribeBodyweightLog,
   updateUserProfile,
 } from './data/profileService';
-import { logoutUser, deleteAccountAndAllData, getStoredDemoUser } from './data/authService';
+import { logoutUser, deleteAccountAndAllData } from './data/authService';
 import type { SetItem, CustomExercise, UserProfile, BodyweightLogEntry } from './types';
 import { getTodayString } from './utils/dateUtils';
 
@@ -52,31 +52,8 @@ export function App() {
     setToast({ id: String(Date.now()), type, text, onRetry });
   };
 
-  // Auth State Listener
+  // Auth State Listener - strictly powered by real Firebase Authentication
   useEffect(() => {
-    const checkDemoUser = () => {
-      const demoUser = getStoredDemoUser();
-      if (demoUser) {
-        setCurrentUser({ uid: demoUser.uid, email: demoUser.email } as any);
-        setIsAuthLoading(false);
-        return true;
-      }
-      return false;
-    };
-
-    if (isDemoConfig) {
-      checkDemoUser();
-
-      const handleDemoChange = () => {
-        const hasUser = checkDemoUser();
-        if (!hasUser) setCurrentUser(null);
-      };
-
-      window.addEventListener('demo-auth-changed', handleDemoChange);
-      setIsAuthLoading(false);
-      return () => window.removeEventListener('demo-auth-changed', handleDemoChange);
-    }
-
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setIsAuthLoading(false);

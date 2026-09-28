@@ -7,7 +7,7 @@ import {
   getDocs,
   deleteDoc,
 } from 'firebase/firestore';
-import { db, isDemoConfig } from './firebase';
+import { db } from './firebase';
 import type { UserProfile, BodyweightLogEntry, SetItem } from '../types';
 import { getTodayString } from '../utils/dateUtils';
 
@@ -19,14 +19,6 @@ const DEFAULT_PROFILE: UserProfile = {
   unit: 'kg',
 };
 
-const getProfileKey = (uid: string) => `liftpulse_profile_${uid}`;
-const getBwLogKey = (uid: string) => `liftpulse_bwlog_${uid}`;
-const getSetsKey = (uid: string) => `liftpulse_sets_${uid}`;
-
-function emitDataChanged() {
-  window.dispatchEvent(new Event('liftpulse-data-changed'));
-}
-
 /**
  * Subscribes to real-time changes of the user profile.
  */
@@ -34,23 +26,6 @@ export function subscribeUserProfile(
   uid: string,
   onUpdate: (profile: UserProfile) => void
 ) {
-  if (isDemoConfig) {
-    const load = () => {
-      const raw = localStorage.getItem(getProfileKey(uid));
-      if (raw) {
-        onUpdate(JSON.parse(raw));
-      } else {
-        localStorage.setItem(getProfileKey(uid), JSON.stringify(DEFAULT_PROFILE));
-        onUpdate(DEFAULT_PROFILE);
-      }
-    };
-
-    load();
-    const handler = () => load();
-    window.addEventListener('liftpulse-data-changed', handler);
-    return () => window.removeEventListener('liftpulse-data-changed', handler);
-  }
-
   const profileRef = doc(db, 'users', uid);
   return onSnapshot(profileRef, (snap) => {
     if (snap.exists()) {
@@ -81,24 +56,6 @@ export async function updateUserProfile(
 ): Promise<void> {
   const newProfile = { ...currentProfile, ...updates };
 
-  if (isDemoConfig) {
-    localStorage.setItem(getProfileKey(uid), JSON.stringify(newProfile));
-
-    if (updates.bodyweight !== undefined && updates.bodyweight !== currentProfile.bodyweight) {
-      const rawLog = localStorage.getItem(getBwLogKey(uid));
-      const logs: BodyweightLogEntry[] = rawLog ? JSON.parse(rawLog) : [];
-      logs.unshift({
-        id: `bw_${Date.now()}`,
-        date: getTodayString(),
-        weight: updates.bodyweight,
-      });
-      localStorage.setItem(getBwLogKey(uid), JSON.stringify(logs));
-    }
-
-    emitDataChanged();
-    return;
-  }
-
   const profileRef = doc(db, 'users', uid);
   await setDoc(profileRef, newProfile, { merge: true });
 
@@ -119,20 +76,6 @@ export function subscribeBodyweightLog(
   uid: string,
   onUpdate: (logs: BodyweightLogEntry[]) => void
 ) {
-  if (isDemoConfig) {
-    const load = () => {
-      const rawLog = localStorage.getItem(getBwLogKey(uid));
-      const logs: BodyweightLogEntry[] = rawLog ? JSON.parse(rawLog) : [];
-      logs.sort((a, b) => b.date.localeCompare(a.date));
-      onUpdate(logs);
-    };
-
-    load();
-    const handler = () => load();
-    window.addEventListener('liftpulse-data-changed', handler);
-    return () => window.removeEventListener('liftpulse-data-changed', handler);
-  }
-
   const bwLogRef = collection(db, 'users', uid, 'bodyweightLog');
   return onSnapshot(bwLogRef, (snap) => {
     const logs: BodyweightLogEntry[] = snap.docs.map((d) => {
@@ -149,18 +92,9 @@ export function subscribeBodyweightLog(
 }
 
 /**
- * Deletes all Firestore / local storage documents for a user.
+ * Deletes all Firestore documents for a user.
  */
 export async function deleteAllUserData(uid: string): Promise<void> {
-  if (isDemoConfig) {
-    localStorage.removeItem(getProfileKey(uid));
-    localStorage.removeItem(getBwLogKey(uid));
-    localStorage.removeItem(getSetsKey(uid));
-    localStorage.removeItem(`liftpulse_custom_${uid}`);
-    emitDataChanged();
-    return;
-  }
-
   const subcollections = ['sets', 'customExercises', 'bodyweightLog'];
 
   for (const sub of subcollections) {
@@ -175,7 +109,7 @@ export async function deleteAllUserData(uid: string): Promise<void> {
 }
 
 /**
- * Populates realistic sample workouts for testing.
+ * Populates realistic sample workouts in Firestore under users/{uid}/sets.
  */
 export async function loadDemoData(uid: string, currentBw: number = 75): Promise<void> {
   const now = new Date();
@@ -189,25 +123,19 @@ export async function loadDemoData(uid: string, currentBw: number = 75): Promise
   };
 
   const sampleSets: SetItem[] = [
-    { id: 'demo_1', date: daysAgo(21), exerciseId: 'bench-press', exerciseName: 'Barbell Bench Press', isBodyweight: false, weight: 60, reps: 10, bodyweightAtTime: currentBw, isPR: false, createdAt: Date.now() - 21 * 86400000 },
-    { id: 'demo_2', date: daysAgo(21), exerciseId: 'bench-press', exerciseName: 'Barbell Bench Press', isBodyweight: false, weight: 80, reps: 5, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 21 * 86400000 + 100 },
-    { id: 'demo_3', date: daysAgo(21), exerciseId: 'dips', exerciseName: 'Chest / Tricep Dips', isBodyweight: true, weight: 0, reps: 12, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 21 * 86400000 + 200 },
-    { id: 'demo_4', date: daysAgo(21), exerciseId: 'dips', exerciseName: 'Chest / Tricep Dips', isBodyweight: true, weight: 15, reps: 6, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 21 * 86400000 + 300 },
-    { id: 'demo_5', date: daysAgo(14), exerciseId: 'barbell-squat', exerciseName: 'Barbell Back Squat', isBodyweight: false, weight: 100, reps: 5, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 14 * 86400000 },
-    { id: 'demo_6', date: daysAgo(14), exerciseId: 'barbell-squat', exerciseName: 'Barbell Back Squat', isBodyweight: false, weight: 110, reps: 3, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 14 * 86400000 + 100 },
-    { id: 'demo_7', date: daysAgo(14), exerciseId: 'pull-ups', exerciseName: 'Pull-ups', isBodyweight: true, weight: 10, reps: 8, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 14 * 86400000 + 200 },
-    { id: 'demo_8', date: daysAgo(7), exerciseId: 'bench-press', exerciseName: 'Barbell Bench Press', isBodyweight: false, weight: 85, reps: 5, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 7 * 86400000 },
-    { id: 'demo_9', date: daysAgo(7), exerciseId: 'bench-press', exerciseName: 'Barbell Bench Press', isBodyweight: false, weight: 95, reps: 2, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 7 * 86400000 + 100 },
-    { id: 'demo_10', date: daysAgo(3), exerciseId: 'dips', exerciseName: 'Chest / Tricep Dips', isBodyweight: true, weight: 20, reps: 5, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 3 * 86400000 },
-    { id: 'demo_11', date: daysAgo(3), exerciseId: 'dips', exerciseName: 'Chest / Tricep Dips', isBodyweight: true, weight: 30, reps: 3, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 3 * 86400000 + 100 },
-    { id: 'demo_12', date: daysAgo(0), exerciseId: 'barbell-squat', exerciseName: 'Barbell Back Squat', isBodyweight: false, weight: 120, reps: 3, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() },
+    { id: 'sample_1', date: daysAgo(21), exerciseId: 'bench-press', exerciseName: 'Barbell Bench Press', isBodyweight: false, weight: 60, reps: 10, bodyweightAtTime: currentBw, isPR: false, createdAt: Date.now() - 21 * 86400000 },
+    { id: 'sample_2', date: daysAgo(21), exerciseId: 'bench-press', exerciseName: 'Barbell Bench Press', isBodyweight: false, weight: 80, reps: 5, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 21 * 86400000 + 100 },
+    { id: 'sample_3', date: daysAgo(21), exerciseId: 'dips', exerciseName: 'Chest / Tricep Dips', isBodyweight: true, weight: 0, reps: 12, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 21 * 86400000 + 200 },
+    { id: 'sample_4', date: daysAgo(21), exerciseId: 'dips', exerciseName: 'Chest / Tricep Dips', isBodyweight: true, weight: 15, reps: 6, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 21 * 86400000 + 300 },
+    { id: 'sample_5', date: daysAgo(14), exerciseId: 'barbell-squat', exerciseName: 'Barbell Back Squat', isBodyweight: false, weight: 100, reps: 5, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 14 * 86400000 },
+    { id: 'sample_6', date: daysAgo(14), exerciseId: 'barbell-squat', exerciseName: 'Barbell Back Squat', isBodyweight: false, weight: 110, reps: 3, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 14 * 86400000 + 100 },
+    { id: 'sample_7', date: daysAgo(14), exerciseId: 'pull-ups', exerciseName: 'Pull-ups', isBodyweight: true, weight: 10, reps: 8, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 14 * 86400000 + 200 },
+    { id: 'sample_8', date: daysAgo(7), exerciseId: 'bench-press', exerciseName: 'Barbell Bench Press', isBodyweight: false, weight: 85, reps: 5, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 7 * 86400000 },
+    { id: 'sample_9', date: daysAgo(7), exerciseId: 'bench-press', exerciseName: 'Barbell Bench Press', isBodyweight: false, weight: 95, reps: 2, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 7 * 86400000 + 100 },
+    { id: 'sample_10', date: daysAgo(3), exerciseId: 'dips', exerciseName: 'Chest / Tricep Dips', isBodyweight: true, weight: 20, reps: 5, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 3 * 86400000 },
+    { id: 'sample_11', date: daysAgo(3), exerciseId: 'dips', exerciseName: 'Chest / Tricep Dips', isBodyweight: true, weight: 30, reps: 3, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() - 3 * 86400000 + 100 },
+    { id: 'sample_12', date: daysAgo(0), exerciseId: 'barbell-squat', exerciseName: 'Barbell Back Squat', isBodyweight: false, weight: 120, reps: 3, bodyweightAtTime: currentBw, isPR: true, createdAt: Date.now() },
   ];
-
-  if (isDemoConfig) {
-    localStorage.setItem(getSetsKey(uid), JSON.stringify(sampleSets));
-    emitDataChanged();
-    return;
-  }
 
   const setsRef = collection(db, 'users', uid, 'sets');
   for (const s of sampleSets) {

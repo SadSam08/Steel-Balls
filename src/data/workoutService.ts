@@ -10,16 +10,8 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import { db, isDemoConfig } from './firebase';
+import { db } from './firebase';
 import type { SetItem, CustomExercise } from '../types';
-
-// Keys for local storage demo fallback
-const getSetsKey = (uid: string) => `liftpulse_sets_${uid}`;
-const getCustomKey = (uid: string) => `liftpulse_custom_${uid}`;
-
-function emitDataChanged() {
-  window.dispatchEvent(new Event('liftpulse-data-changed'));
-}
 
 /**
  * Subscribes to real-time changes for all sets of a user.
@@ -29,21 +21,6 @@ export function subscribeToUserSets(
   onUpdate: (sets: SetItem[]) => void,
   onError?: (err: Error) => void
 ) {
-  if (isDemoConfig) {
-    const load = () => {
-      const raw = localStorage.getItem(getSetsKey(uid));
-      const sets: SetItem[] = raw ? JSON.parse(raw) : [];
-      sets.sort((a, b) => b.createdAt - a.createdAt);
-      onUpdate(sets);
-    };
-
-    load();
-
-    const handler = () => load();
-    window.addEventListener('liftpulse-data-changed', handler);
-    return () => window.removeEventListener('liftpulse-data-changed', handler);
-  }
-
   const setsRef = collection(db, 'users', uid, 'sets');
   const q = query(setsRef, orderBy('createdAt', 'desc'));
 
@@ -81,20 +58,6 @@ export function subscribeToCustomExercises(
   uid: string,
   onUpdate: (exercises: CustomExercise[]) => void
 ) {
-  if (isDemoConfig) {
-    const load = () => {
-      const raw = localStorage.getItem(getCustomKey(uid));
-      const custom: CustomExercise[] = raw ? JSON.parse(raw) : [];
-      onUpdate(custom);
-    };
-
-    load();
-
-    const handler = () => load();
-    window.addEventListener('liftpulse-data-changed', handler);
-    return () => window.removeEventListener('liftpulse-data-changed', handler);
-  }
-
   const customRef = collection(db, 'users', uid, 'customExercises');
   return onSnapshot(customRef, (snapshot) => {
     const custom: CustomExercise[] = snapshot.docs.map((docSnap) => {
@@ -116,17 +79,6 @@ export async function addWorkoutSet(
   uid: string,
   setData: Omit<SetItem, 'id'>
 ): Promise<string> {
-  if (isDemoConfig) {
-    const raw = localStorage.getItem(getSetsKey(uid));
-    const sets: SetItem[] = raw ? JSON.parse(raw) : [];
-    const id = `set_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-    const newSet: SetItem = { id, ...setData };
-    sets.unshift(newSet);
-    localStorage.setItem(getSetsKey(uid), JSON.stringify(sets));
-    emitDataChanged();
-    return id;
-  }
-
   const setsRef = collection(db, 'users', uid, 'sets');
   const newDocRef = doc(setsRef);
   const payload = {
@@ -153,15 +105,6 @@ export async function updateWorkoutSet(
   setId: string,
   updates: Partial<SetItem>
 ): Promise<void> {
-  if (isDemoConfig) {
-    const raw = localStorage.getItem(getSetsKey(uid));
-    let sets: SetItem[] = raw ? JSON.parse(raw) : [];
-    sets = sets.map((s) => (s.id === setId ? { ...s, ...updates } : s));
-    localStorage.setItem(getSetsKey(uid), JSON.stringify(sets));
-    emitDataChanged();
-    return;
-  }
-
   const setRef = doc(db, 'users', uid, 'sets', setId);
   await updateDoc(setRef, updates as Record<string, any>);
 }
@@ -170,15 +113,6 @@ export async function updateWorkoutSet(
  * Deletes a set document.
  */
 export async function deleteWorkoutSet(uid: string, setId: string): Promise<void> {
-  if (isDemoConfig) {
-    const raw = localStorage.getItem(getSetsKey(uid));
-    let sets: SetItem[] = raw ? JSON.parse(raw) : [];
-    sets = sets.filter((s) => s.id !== setId);
-    localStorage.setItem(getSetsKey(uid), JSON.stringify(sets));
-    emitDataChanged();
-    return;
-  }
-
   const setRef = doc(db, 'users', uid, 'sets', setId);
   await deleteDoc(setRef);
 }
@@ -191,15 +125,6 @@ export async function deleteExerciseSetsFromDate(
   exerciseId: string,
   date: string
 ): Promise<void> {
-  if (isDemoConfig) {
-    const raw = localStorage.getItem(getSetsKey(uid));
-    let sets: SetItem[] = raw ? JSON.parse(raw) : [];
-    sets = sets.filter((s) => !(s.date === date && s.exerciseId === exerciseId));
-    localStorage.setItem(getSetsKey(uid), JSON.stringify(sets));
-    emitDataChanged();
-    return;
-  }
-
   const setsRef = collection(db, 'users', uid, 'sets');
   const q = query(setsRef, where('date', '==', date), where('exerciseId', '==', exerciseId));
   const snapshot = await getDocs(q);
@@ -216,17 +141,6 @@ export async function createCustomExercise(
   name: string,
   isBodyweight: boolean
 ): Promise<CustomExercise> {
-  if (isDemoConfig) {
-    const raw = localStorage.getItem(getCustomKey(uid));
-    const custom: CustomExercise[] = raw ? JSON.parse(raw) : [];
-    const id = `custom_${Date.now()}`;
-    const newEx = { id, name, isBodyweight };
-    custom.push(newEx);
-    localStorage.setItem(getCustomKey(uid), JSON.stringify(custom));
-    emitDataChanged();
-    return newEx;
-  }
-
   const customRef = collection(db, 'users', uid, 'customExercises');
   const newDocRef = doc(customRef);
   const id = `custom_${newDocRef.id}`;
