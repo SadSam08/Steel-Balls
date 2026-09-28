@@ -15,7 +15,6 @@ import {
   subscribeUserProfile,
   subscribeBodyweightLog,
   updateUserProfile,
-  loadDemoData,
 } from './data/profileService';
 import { logoutUser, deleteAccountAndAllData, getStoredDemoUser } from './data/authService';
 import type { SetItem, CustomExercise, UserProfile, BodyweightLogEntry } from './types';
@@ -204,10 +203,6 @@ export function App() {
     showToast('success', 'Data reset.');
   };
 
-  const handleLoadDemoData = async () => {
-    await loadDemoData(activeUser.uid, userProfile.bodyweight);
-    showToast('success', 'Demo workout data loaded! Check PRs tab & Calendar.');
-  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Outfit',sans-serif]">
@@ -274,7 +269,7 @@ export function App() {
         onUpdateProfile={handleUpdateProfile}
         onLogout={handleLogout}
         onDeleteAccount={handleDeleteAccount}
-        onLoadDemoData={handleLoadDemoData}
+
         onError={(msg) => showToast('error', msg)}
       />
     </div>

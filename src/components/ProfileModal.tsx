@@ -4,7 +4,6 @@ import {
   User,
   LogOut,
   Trash2,
-  Database,
   History,
   AlertTriangle,
   Scale,
@@ -23,7 +22,7 @@ interface ProfileModalProps {
   onUpdateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   onLogout: () => Promise<void>;
   onDeleteAccount: (reauthPassword?: string) => Promise<void>;
-  onLoadDemoData: () => Promise<void>;
+
   onError: (msg: string) => void;
 }
 
@@ -36,7 +35,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onUpdateProfile,
   onLogout,
   onDeleteAccount,
-  onLoadDemoData,
+
   onError,
 }) => {
   const [height, setHeight] = useState(profile.height);
@@ -50,7 +49,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [reauthPassword, setReauthPassword] = useState('');
   const [requiresReauthPass, setRequiresReauthPass] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isDemoLoading, setIsDemoLoading] = useState(false);
+
 
   if (!isOpen) return null;
 
@@ -89,17 +88,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
-  const handleDemoDataClick = async () => {
-    setIsDemoLoading(true);
-    try {
-      await onLoadDemoData();
-      onClose();
-    } catch (err: any) {
-      onError(err?.message || 'Failed to load demo data');
-    } finally {
-      setIsDemoLoading(false);
-    }
-  };
+
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
@@ -217,19 +206,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </div>
         )}
 
-        {/* Dev / Test Demo Data Button */}
-        <div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-700/40 space-y-2">
-          <p className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
-            <Database size={13} className="text-cyan-400" /> Developer Testing Tool
-          </p>
-          <button
-            onClick={handleDemoDataClick}
-            disabled={isDemoLoading}
-            className="w-full py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-cyan-400 font-bold text-xs transition border border-cyan-500/20 active:scale-95"
-          >
-            {isDemoLoading ? 'Generating Sample Workouts...' : '⚡ Load Demo Workout & PR Data'}
-          </button>
-        </div>
+
 
         {/* Action Buttons: Logout & Delete Account */}
         <div className="pt-2 border-t border-slate-700/80 space-y-2">
