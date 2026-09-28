@@ -27,49 +27,89 @@ export function calculateEpley1RM(set: SetItem): number {
 }
 
 /**
+ * Checks whether set A strictly beats or replaces set B for the same exercise.
+ *
+ * Rules:
+ * 1. Same rep: whichever has higher weight is the PR.
+ * 2. Same weight: whichever has higher reps is the PR.
+ * 3. Higher weight AND higher reps: A strictly dominates B.
+ * 4. Same weight AND same reps: whichever is newer (createdAt / date) is the PR.
+ */
+function doesSetBeat(a: SetItem, b: SetItem): boolean {
+  if (a.id === b.id) return false;
+
+  const aWeight = a.weight ?? 0;
+  const bWeight = b.weight ?? 0;
+  const aReps = a.reps ?? 0;
+  const bReps = b.reps ?? 0;
+
+  // Condition 1: Same weight & same reps -> newer wins
+  if (aWeight === bWeight && aReps === bReps) {
+    if (a.createdAt !== b.createdAt) {
+      return a.createdAt > b.createdAt;
+    }
+    const dateCmp = (a.date || '').localeCompare(b.date || '');
+    if (dateCmp !== 0) {
+      return dateCmp > 0;
+    }
+    return (a.id || '').localeCompare(b.id || '') > 0;
+  }
+
+  // Condition 2: Equal or higher on both dimensions, with at least one strictly higher
+  // Covers:
+  // - Same weight, higher reps (aWeight === bWeight && aReps > bReps)
+  // - Same reps, higher weight (aReps === bReps && aWeight > bWeight)
+  // - Higher weight AND higher reps (aWeight > bWeight && aReps > bReps)
+  if (aWeight >= bWeight && aReps >= bReps) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Computes Current PRs dynamically from PR-flagged sets.
- * Groups by exercise and rep count, picking the set with the highest total load (or most recent on tie).
+ *
+ * Rules:
+ * - Same exercise, same rep: whichever is higher weight is PR.
+ * - Same exercise, same weight: whichever is higher rep is PR.
+ * - An exercise can have multiple PRs at a time, but at the same weight
+ *   there can only be 1 PR, and at the same rep there can only be 1 PR.
+ * - Dominated / superseded PRs are shown only in PR History.
  */
 export function computeCurrentPRs(allSets: SetItem[]): CurrentPRGroup[] {
   const prSets = allSets.filter((s) => s.isPR);
-  
-  // Map key: `${exerciseId}_${reps}`
-  const bestMap = new Map<string, SetItem>();
 
+  // Group by exerciseId
+  const exerciseMap = new Map<string, SetItem[]>();
   for (const set of prSets) {
-    const key = `${set.exerciseId}_${set.reps}`;
-    const existing = bestMap.get(key);
-
-    if (!existing) {
-      bestMap.set(key, set);
-    } else {
-      const existingLoad = calculateTotalLoad(existing);
-      const currentLoad = calculateTotalLoad(set);
-
-      if (currentLoad > existingLoad) {
-        bestMap.set(key, set);
-      } else if (currentLoad === existingLoad) {
-        // Tie breaker: most recent date/createdAt
-        if (set.createdAt > existing.createdAt || set.date > existing.date) {
-          bestMap.set(key, set);
-        }
-      }
+    if (!exerciseMap.has(set.exerciseId)) {
+      exerciseMap.set(set.exerciseId, []);
     }
+    exerciseMap.get(set.exerciseId)!.push(set);
   }
 
   const results: CurrentPRGroup[] = [];
-  bestMap.forEach((bestSet) => {
-    results.push({
-      exerciseId: bestSet.exerciseId,
-      exerciseName: bestSet.exerciseName,
-      isBodyweight: bestSet.isBodyweight,
-      reps: bestSet.reps,
-      bestSet,
-      totalLoad: calculateTotalLoad(bestSet),
-    });
+
+  exerciseMap.forEach((sets) => {
+    // A set is a Current PR if no other PR set for this exercise strictly beats it
+    const activePRs = sets.filter((candidate) =>
+      !sets.some((other) => doesSetBeat(other, candidate))
+    );
+
+    for (const bestSet of activePRs) {
+      results.push({
+        exerciseId: bestSet.exerciseId,
+        exerciseName: bestSet.exerciseName,
+        isBodyweight: bestSet.isBodyweight,
+        reps: bestSet.reps,
+        bestSet,
+        totalLoad: calculateTotalLoad(bestSet),
+      });
+    }
   });
 
-  // Sort by exercise name then reps ascending
+  // Sort by exercise name ascending, then reps ascending
   results.sort((a, b) => {
     if (a.exerciseName !== b.exerciseName) {
       return a.exerciseName.localeCompare(b.exerciseName);

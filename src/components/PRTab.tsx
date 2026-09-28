@@ -294,7 +294,7 @@ export const PRTab: React.FC<PRTabProps> = ({
           ) : (
             currentPRs.map((prGroup) => (
               <div
-                key={`${prGroup.exerciseId}_${prGroup.reps}`}
+                key={`${prGroup.exerciseId}_${prGroup.bestSet.id}`}
                 onClick={() =>
                   setChartSelection({
                     exerciseId: prGroup.exerciseId,
