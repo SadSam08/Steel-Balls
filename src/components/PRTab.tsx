@@ -288,7 +288,7 @@ export const PRTab: React.FC<PRTabProps> = ({
               <Trophy className="w-12 h-12 text-slate-500 mx-auto" />
               <h3 className="text-sm font-semibold text-slate-300">No PRs marked yet</h3>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                Tap the <span className="text-amber-400 font-bold">+</span> button to log a PR directly, or toggle the trophy icon on any set.
+                Tap the <span className="text-cyan-400 font-bold">+</span> button to log a PR directly, or toggle the trophy icon on any set.
               </p>
             </div>
           ) : (
@@ -368,7 +368,7 @@ export const PRTab: React.FC<PRTabProps> = ({
                     <div key={set.id}>
                       {/* Edit Mode */}
                       {editingSetId === set.id ? (
-                        <div className="bg-slate-900/80 border border-amber-500/40 rounded-xl p-3 space-y-3">
+                        <div className="bg-slate-900/80 border border-cyan-500/40 rounded-xl p-3 space-y-3">
                           {editError && (
                             <p className="text-xs text-red-400">{editError}</p>
                           )}
@@ -383,7 +383,7 @@ export const PRTab: React.FC<PRTabProps> = ({
                                 value={editWeightStr}
                                 onChange={(e) => { setEditWeightStr(e.target.value); setEditError(null); }}
                                 onFocus={(e) => e.target.select()}
-                                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs text-center focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs text-center focus:ring-1 focus:ring-cyan-500 focus:outline-none"
                               />
                             </div>
                             <div>
@@ -394,7 +394,7 @@ export const PRTab: React.FC<PRTabProps> = ({
                                 value={editRepsStr}
                                 onChange={(e) => { setEditRepsStr(e.target.value); setEditError(null); }}
                                 onFocus={(e) => e.target.select()}
-                                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs text-center focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs text-center focus:ring-1 focus:ring-cyan-500 focus:outline-none"
                               />
                             </div>
                           </div>
@@ -405,7 +405,7 @@ export const PRTab: React.FC<PRTabProps> = ({
                               value={editDate}
                               max={getTodayString()}
                               onChange={(e) => { setEditDate(e.target.value); setEditError(null); }}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-cyan-500 focus:outline-none"
                             />
                           </div>
                           <div className="flex gap-2">
@@ -418,7 +418,7 @@ export const PRTab: React.FC<PRTabProps> = ({
                             <button
                               onClick={saveEdit}
                               disabled={isSavingEdit}
-                              className="flex-1 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition"
+                              className="flex-1 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition"
                             >
                               {isSavingEdit ? 'Saving...' : 'Save'}
                             </button>
@@ -463,7 +463,7 @@ export const PRTab: React.FC<PRTabProps> = ({
                             {/* Edit */}
                             <button
                               onClick={() => startEdit(set)}
-                              className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-amber-400 hover:bg-slate-700 transition"
+                              className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-cyan-400 hover:bg-slate-700 transition"
                               title="Edit PR"
                               aria-label="Edit PR"
                             >
@@ -502,7 +502,7 @@ export const PRTab: React.FC<PRTabProps> = ({
       <button
         onClick={() => setShowAddPRModal(true)}
         aria-label="Add PR"
-        className="fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-2xl shadow-amber-500/40 flex items-center justify-center transition active:scale-90 focus:outline-none focus:ring-4 focus:ring-amber-500/40"
+        className="fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-2xl shadow-cyan-500/40 flex items-center justify-center transition active:scale-90 focus:outline-none focus:ring-4 focus:ring-cyan-500/40"
       >
         <Plus size={28} strokeWidth={2.5} />
       </button>

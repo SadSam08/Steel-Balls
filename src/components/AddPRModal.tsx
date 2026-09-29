@@ -161,7 +161,7 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+            <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400">
               <Trophy size={18} />
             </div>
             <div>
@@ -205,7 +205,7 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
                 onFocus={() => {
                   if (searchQuery) setShowDropdown(true);
                 }}
-                className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-amber-500/60 focus:outline-none"
+                className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 focus:outline-none"
               />
             </div>
 
@@ -219,7 +219,7 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
                       onClick={() => handleSelectExercise(ex)}
                       className="w-full px-4 py-3 text-left hover:bg-slate-700/60 flex items-center justify-between transition group"
                     >
-                      <span className="text-sm font-medium text-slate-100 group-hover:text-amber-400">
+                      <span className="text-sm font-medium text-slate-100 group-hover:text-cyan-400">
                         {ex.name}
                       </span>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400">
@@ -303,7 +303,7 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
                   setInlineError(null);
                 }}
                 onFocus={(e) => e.target.select()}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-amber-500/60 focus:outline-none text-center font-semibold"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none text-center font-semibold"
               />
             </div>
             <div>
@@ -318,7 +318,7 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
                   setInlineError(null);
                 }}
                 onFocus={(e) => e.target.select()}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-amber-500/60 focus:outline-none text-center font-semibold"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none text-center font-semibold"
               />
             </div>
           </div>
@@ -336,7 +336,7 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
                 setDate(e.target.value);
                 setInlineError(null);
               }}
-              className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-amber-500/60 focus:outline-none"
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none"
             />
             {bodyweightLogs.length > 0 && date && (
               <p className="text-[10px] text-slate-500 mt-1">
@@ -349,7 +349,7 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 active:scale-95 transition disabled:opacity-50"
+            className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25 active:scale-95 transition disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-cyan-500/40"
           >
             {isSaving ? (
               <>
