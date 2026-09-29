@@ -11,7 +11,7 @@ import {
   getDocs,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { SetItem, CustomExercise } from '../types';
+import type { SetItem, CustomExercise, WorkoutTemplate, TemplateExercise } from '../types';
 
 /**
  * Subscribes to real-time changes for all sets of a user.
@@ -151,3 +151,75 @@ export async function createCustomExercise(
 
   return { id, name, isBodyweight };
 }
+
+/**
+ * Subscribes to real-time changes for workout templates of a user.
+ */
+export function subscribeToUserTemplates(
+  uid: string,
+  onUpdate: (templates: WorkoutTemplate[]) => void,
+  onError?: (err: Error) => void
+) {
+  const templatesRef = collection(db, 'users', uid, 'templates');
+  const q = query(templatesRef, orderBy('createdAt', 'desc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const templates: WorkoutTemplate[] = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          name: data.name || 'Untitled Template',
+          exercises: Array.isArray(data.exercises) ? data.exercises : [],
+          createdAt: data.createdAt || Date.now(),
+        };
+      });
+      onUpdate(templates);
+    },
+    (err) => {
+      console.error('Error listening to templates:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+/**
+ * Saves or updates a workout template for a user.
+ */
+export async function saveWorkoutTemplate(
+  uid: string,
+  name: string,
+  exercises: TemplateExercise[],
+  existingTemplateId?: string
+): Promise<string> {
+  const templatesRef = collection(db, 'users', uid, 'templates');
+  const docRef = existingTemplateId
+    ? doc(db, 'users', uid, 'templates', existingTemplateId)
+    : doc(templatesRef);
+
+  const payload = {
+    name: name.trim(),
+    exercises: exercises.map((ex) => ({
+      exerciseId: ex.exerciseId,
+      name: ex.name,
+      isBodyweight: Boolean(ex.isBodyweight),
+    })),
+    createdAt: Date.now(),
+  };
+
+  await setDoc(docRef, payload, { merge: true });
+  return docRef.id;
+}
+
+/**
+ * Deletes a workout template for a user.
+ */
+export async function deleteWorkoutTemplate(
+  uid: string,
+  templateId: string
+): Promise<void> {
+  const templateRef = doc(db, 'users', uid, 'templates', templateId);
+  await deleteDoc(templateRef);
+}
+

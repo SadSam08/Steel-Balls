@@ -5,11 +5,14 @@ import { auth } from './data/firebase';
 import {
   subscribeToUserSets,
   subscribeToCustomExercises,
+  subscribeToUserTemplates,
   addWorkoutSet,
   updateWorkoutSet,
   deleteWorkoutSet,
   deleteExerciseSetsFromDate,
   createCustomExercise,
+  saveWorkoutTemplate,
+  deleteWorkoutTemplate,
 } from './data/workoutService';
 import {
   subscribeUserProfile,
@@ -17,7 +20,7 @@ import {
   updateUserProfile,
 } from './data/profileService';
 import { logoutUser, deleteAccountAndAllData } from './data/authService';
-import type { SetItem, CustomExercise, UserProfile, BodyweightLogEntry } from './types';
+import type { SetItem, CustomExercise, UserProfile, BodyweightLogEntry, WorkoutTemplate, TemplateExercise } from './types';
 import { getTodayString } from './utils/dateUtils';
 
 import { Header } from './components/Header';
@@ -39,6 +42,7 @@ export function App() {
   // App Data State
   const [allSets, setAllSets] = useState<SetItem[]>([]);
   const [customExercises, setCustomExercises] = useState<CustomExercise[]>([]);
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [bodyweightLogs, setBodyweightLogs] = useState<BodyweightLogEntry[]>([]);
 
@@ -88,6 +92,10 @@ export function App() {
       setCustomExercises(custom)
     );
 
+    const unsubTemplates = subscribeToUserTemplates(uid, (tpls) =>
+      setTemplates(tpls)
+    );
+
     const unsubProfile = subscribeUserProfile(uid, (prof) => setProfile(prof));
 
     const unsubBwLogs = subscribeBodyweightLog(uid, (logs) => setBodyweightLogs(logs));
@@ -95,6 +103,7 @@ export function App() {
     return () => {
       unsubSets();
       unsubCustom();
+      unsubTemplates();
       unsubProfile();
       unsubBwLogs();
     };
@@ -191,6 +200,20 @@ export function App() {
     return await createCustomExercise(currentUser.uid, name, isBodyweight);
   };
 
+  const handleSaveTemplate = async (
+    name: string,
+    exercises: TemplateExercise[],
+    existingTemplateId?: string
+  ) => {
+    if (!currentUser) return;
+    await saveWorkoutTemplate(currentUser.uid, name, exercises, existingTemplateId);
+  };
+
+  const handleDeleteTemplate = async (templateId: string, _templateName?: string) => {
+    if (!currentUser) return;
+    await deleteWorkoutTemplate(currentUser.uid, templateId);
+  };
+
   const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
     await updateUserProfile(currentUser.uid, updates, userProfile);
     showToast('success', 'Profile updated!');
@@ -240,13 +263,17 @@ export function App() {
             onSelectDate={(dateStr) => setSelectedDate(dateStr)}
             allSets={allSets}
             customExercises={customExercises}
+            templates={templates}
             userProfile={userProfile}
             onAddSet={handleAddSet}
             onUpdateSet={handleUpdateSet}
             onDeleteSet={handleDeleteSet}
             onDeleteExerciseFromDate={handleDeleteExerciseFromDate}
             onAddCustomExercise={handleAddCustomExercise}
+            onSaveTemplate={handleSaveTemplate}
+            onDeleteTemplate={handleDeleteTemplate}
             onError={(msg) => showToast('error', msg)}
+            onSuccess={(msg) => showToast('success', msg)}
           />
         )}
 

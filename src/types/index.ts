@@ -35,6 +35,19 @@ export interface BuiltInExercise {
 
 export type Exercise = BuiltInExercise | CustomExercise;
 
+export interface TemplateExercise {
+  exerciseId: string;
+  name: string;
+  isBodyweight: boolean;
+}
+
+export interface WorkoutTemplate {
+  id: string;
+  name: string;
+  exercises: TemplateExercise[];
+  createdAt: number;
+}
+
 export interface BodyweightLogEntry {
   id: string;
   date: string; // YYYY-MM-DD
