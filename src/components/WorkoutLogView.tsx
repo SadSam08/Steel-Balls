@@ -10,6 +10,8 @@ import {
   Sparkles,
   FolderOpen,
   BookmarkPlus,
+  Hourglass,
+  Square,
 } from 'lucide-react';
 import type {
   SetItem,
@@ -21,6 +23,87 @@ import type {
 } from '../types';
 import builtInExercises from '../data/builtInExercises.json';
 import { formatDateLabel, getTodayString } from '../utils/dateUtils';
+
+interface RestTimerItem {
+  id: string;
+  exerciseId: string;
+  startTime: number;
+  endTime?: number;
+}
+
+interface RestTimerRowProps {
+  item: RestTimerItem;
+  onStop: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+const RestTimerRow: React.FC<RestTimerRowProps> = ({
+  item,
+  onStop,
+  onDelete,
+}) => {
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    if (item.endTime) return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 200);
+    return () => clearInterval(interval);
+  }, [item.endTime]);
+
+  const isRunning = !item.endTime;
+  const elapsedMs = (item.endTime || now) - item.startTime;
+  const elapsedSec = Math.max(0, Math.floor(elapsedMs / 1000));
+
+  const minutes = Math.floor(elapsedSec / 60);
+  const seconds = elapsedSec % 60;
+  const formattedTime = `${minutes}:${String(seconds).padStart(2, '0')}`;
+
+  return (
+    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-xs my-1">
+      <div className="flex items-center gap-2 font-mono">
+        <Hourglass
+          size={16}
+          className={
+            isRunning
+              ? 'text-cyan-400 animate-[spin_3s_linear_infinite]'
+              : 'text-slate-400'
+          }
+        />
+        <span className="font-semibold text-slate-300">
+          {isRunning ? 'Resting:' : 'Rest:'}
+        </span>
+        <span
+          className={`font-bold text-sm tracking-wider ${
+            isRunning ? 'text-cyan-400' : 'text-slate-200'
+          }`}
+        >
+          {formattedTime}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        {isRunning && (
+          <button
+            onClick={() => onStop(item.id)}
+            className="px-2.5 py-1 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] transition active:scale-95 flex items-center gap-1"
+          >
+            <Square size={10} fill="currentColor" /> Stop
+          </button>
+        )}
+        <button
+          onClick={() => onDelete(item.id)}
+          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 transition"
+          title="Delete rest timer"
+          aria-label="Delete rest timer"
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 interface WorkoutLogViewProps {
   selectedDate: string;
@@ -199,6 +282,9 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
   const [customName, setCustomName] = useState('');
   const [customIsBodyweight, setCustomIsBodyweight] = useState(false);
 
+  // Rest Timers local UI state
+  const [restTimers, setRestTimers] = useState<RestTimerItem[]>([]);
+
   // Template Save & Management state
   const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
   const [templateNameInput, setTemplateNameInput] = useState('');
@@ -329,6 +415,40 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
     } catch (err: any) {
       onError(err?.message || 'Failed to apply template');
     }
+  };
+
+  // Rest Timer handlers
+  const handleAddRestTimer = (exerciseId: string) => {
+    const now = Date.now();
+    setRestTimers((prev) => {
+      // Stop-previous behavior: automatically stop any running timer for this exercise
+      const updated = prev.map((t) => {
+        if (t.exerciseId === exerciseId && !t.endTime) {
+          return { ...t, endTime: now };
+        }
+        return t;
+      });
+
+      return [
+        ...updated,
+        {
+          id: `rest_${now}_${Math.random().toString(36).slice(2, 7)}`,
+          exerciseId,
+          startTime: now,
+        },
+      ];
+    });
+  };
+
+  const handleStopRestTimer = (timerId: string) => {
+    const now = Date.now();
+    setRestTimers((prev) =>
+      prev.map((t) => (t.id === timerId ? { ...t, endTime: now } : t))
+    );
+  };
+
+  const handleDeleteRestTimer = (timerId: string) => {
+    setRestTimers((prev) => prev.filter((t) => t.id !== timerId));
   };
 
   // Handle adding custom exercise
@@ -669,15 +789,45 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                 ))}
               </div>
 
-              {/* Quick Add Set Button */}
-              <button
-                onClick={() =>
-                  handleQuickAddSet(group.exerciseId, group.exerciseName, group.isBodyweight)
-                }
-                className="w-full py-2 rounded-xl bg-slate-700/40 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 font-semibold text-xs flex items-center justify-center gap-1.5 border border-dashed border-slate-600 transition active:scale-95"
-              >
-                <Plus size={15} /> Add Set
-              </button>
+              {/* Rest Timers logged for this exercise */}
+              {restTimers
+                .filter((t) => t.exerciseId === group.exerciseId)
+                .map((timerItem) => (
+                  <RestTimerRow
+                    key={timerItem.id}
+                    item={timerItem}
+                    onStop={handleStopRestTimer}
+                    onDelete={handleDeleteRestTimer}
+                  />
+                ))}
+
+              {/* 50/50 Split Button Row: Add Set | Add Rest */}
+              <div className="flex items-center rounded-xl bg-slate-700/40 border border-dashed border-slate-600 overflow-hidden">
+                <button
+                  onClick={() =>
+                    handleQuickAddSet(group.exerciseId, group.exerciseName, group.isBodyweight)
+                  }
+                  className="flex-1 py-2 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 border-r border-slate-600/60"
+                >
+                  <Plus size={15} /> Add Set
+                </button>
+                <button
+                  onClick={() => handleAddRestTimer(group.exerciseId)}
+                  className="flex-1 py-2 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition active:scale-95"
+                >
+                  <Hourglass
+                    size={15}
+                    className={
+                      restTimers.some(
+                        (t) => t.exerciseId === group.exerciseId && !t.endTime
+                      )
+                        ? 'animate-[spin_3s_linear_infinite]'
+                        : ''
+                    }
+                  />{' '}
+                  Add Rest
+                </button>
+              </div>
             </div>
           ))}
 
