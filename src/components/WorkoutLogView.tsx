@@ -766,40 +766,64 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                 </button>
               </div>
 
-              {/* Sets List Table */}
-              <div className="space-y-2">
-                <div className="grid grid-cols-12 gap-2 text-[11px] font-semibold text-slate-400 px-1">
-                  <div className="col-span-2 text-center">SET</div>
-                  <div className="col-span-4">
-                    {group.isBodyweight ? `ADDED (${userProfile.unit})` : `WEIGHT (${userProfile.unit})`}
+              {/* Combined, time-ordered list of sets and rest timers */}
+              {(() => {
+                const exerciseRests = restTimers.filter(
+                  (t) => t.exerciseId === group.exerciseId
+                );
+                type SetEntry = { kind: 'set'; item: (typeof group.sets)[number]; sortKey: number };
+                type RestEntry = { kind: 'rest'; item: (typeof exerciseRests)[number]; sortKey: number };
+                const combined: (SetEntry | RestEntry)[] = [
+                  ...group.sets.map((s) => ({ kind: 'set' as const, item: s, sortKey: s.createdAt })),
+                  ...exerciseRests.map((r) => ({ kind: 'rest' as const, item: r, sortKey: r.startTime })),
+                ].sort((a, b) => a.sortKey - b.sortKey);
+
+                // Count sets to display 1-based set index
+                let setIndex = 0;
+
+                return (
+                  <div className="space-y-2">
+                    {/* Column headers — only show when there is at least one set */}
+                    {group.sets.length > 0 && (
+                      <div className="grid grid-cols-12 gap-2 text-[11px] font-semibold text-slate-400 px-1">
+                        <div className="col-span-2 text-center">SET</div>
+                        <div className="col-span-4">
+                          {group.isBodyweight
+                            ? `ADDED (${userProfile.unit})`
+                            : `WEIGHT (${userProfile.unit})`}
+                        </div>
+                        <div className="col-span-3 text-center">REPS</div>
+                        <div className="col-span-1 text-center">PR</div>
+                        <div className="col-span-2 text-right">ACTION</div>
+                      </div>
+                    )}
+
+                    {combined.map((entry) => {
+                      if (entry.kind === 'set') {
+                        const currentIdx = setIndex++;
+                        return (
+                          <SetRowItem
+                            key={entry.item.id}
+                            set={entry.item}
+                            idx={currentIdx}
+                            onUpdateSet={onUpdateSet}
+                            onDeleteSet={onDeleteSet}
+                          />
+                        );
+                      } else {
+                        return (
+                          <RestTimerRow
+                            key={entry.item.id}
+                            item={entry.item}
+                            onStop={handleStopRestTimer}
+                            onDelete={handleDeleteRestTimer}
+                          />
+                        );
+                      }
+                    })}
                   </div>
-                  <div className="col-span-3 text-center">REPS</div>
-                  <div className="col-span-1 text-center">PR</div>
-                  <div className="col-span-2 text-right">ACTION</div>
-                </div>
-
-                {group.sets.map((set, idx) => (
-                  <SetRowItem
-                    key={set.id}
-                    set={set}
-                    idx={idx}
-                    onUpdateSet={onUpdateSet}
-                    onDeleteSet={onDeleteSet}
-                  />
-                ))}
-              </div>
-
-              {/* Rest Timers logged for this exercise */}
-              {restTimers
-                .filter((t) => t.exerciseId === group.exerciseId)
-                .map((timerItem) => (
-                  <RestTimerRow
-                    key={timerItem.id}
-                    item={timerItem}
-                    onStop={handleStopRestTimer}
-                    onDelete={handleDeleteRestTimer}
-                  />
-                ))}
+                );
+              })()}
 
               {/* 50/50 Split Button Row: Add Set | Add Rest */}
               <div className="flex items-center rounded-xl bg-slate-700/40 border border-dashed border-slate-600 overflow-hidden">
