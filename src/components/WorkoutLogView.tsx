@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus,
   Trash2,
@@ -12,7 +12,24 @@ import {
   BookmarkPlus,
   Hourglass,
   Square,
+  GripVertical,
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type {
   SetItem,
   CustomExercise,
@@ -258,6 +275,56 @@ const SetRowItem: React.FC<SetRowItemProps> = ({
   );
 };
 
+// Sortable wrapper for each exercise card
+interface SortableExerciseCardProps {
+  id: string;
+  children: React.ReactNode;
+}
+
+// Context to pass drag handle props into the card's header
+const SortableDragHandleContext = React.createContext<{
+  attributes: React.HTMLAttributes<HTMLElement>;
+  listeners: Record<string, React.EventHandler<any>> | undefined;
+} | null>(null);
+
+const SortableExerciseCard: React.FC<SortableExerciseCardProps> = ({ id, children }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+
+  return (
+    <SortableDragHandleContext.Provider value={{ attributes, listeners }}>
+      <div
+        ref={setNodeRef}
+        style={{
+          transform: CSS.Transform.toString(transform),
+          transition,
+          opacity: isDragging ? 0.5 : 1,
+        }}
+        className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3"
+      >
+        {children}
+      </div>
+    </SortableDragHandleContext.Provider>
+  );
+};
+
+// Drag handle that consumes the SortableDragHandleContext — must be a proper component to use useContext
+const ExerciseCardDragHandle: React.FC = () => {
+  const dragHandle = React.useContext(SortableDragHandleContext);
+  if (!dragHandle) return null;
+  return (
+    <button
+      {...dragHandle.attributes}
+      {...dragHandle.listeners}
+      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 cursor-grab active:cursor-grabbing touch-none transition"
+      aria-label="Drag to reorder"
+      title="Drag to reorder"
+      tabIndex={-1}
+    >
+      <GripVertical size={16} />
+    </button>
+  );
+};
+
 export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
   selectedDate,
   onSelectDate,
@@ -291,6 +358,17 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
   const [overwriteCandidate, setOverwriteCandidate] = useState<WorkoutTemplate | null>(null);
   const [deletingTemplate, setDeletingTemplate] = useState<WorkoutTemplate | null>(null);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+
+  // Local exercise order state for drag-to-reorder
+  const [exerciseOrder, setExerciseOrder] = useState<string[]>([]);
+  // Track previous date to reset order when date changes
+  const prevDateRef = useRef(selectedDate);
+
+  // dnd-kit sensors (pointer + touch)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+  );
 
   // Filter sets for selected date
   const daySets = useMemo(
@@ -326,6 +404,69 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
 
     return groups;
   }, [daySets]);
+
+  // Sync exerciseOrder when date changes or new exercises are added
+  useEffect(() => {
+    const ids = groupedExercises.map((g) => g.exerciseId);
+    if (prevDateRef.current !== selectedDate) {
+      // Date changed: reset order to natural order
+      prevDateRef.current = selectedDate;
+      setExerciseOrder(ids);
+    } else {
+      // Same date: merge in any newly added exercises not yet in order list
+      setExerciseOrder((prev) => {
+        const existing = new Set(prev);
+        const newIds = ids.filter((id) => !existing.has(id));
+        // Also remove exercises that no longer exist
+        const filtered = prev.filter((id) => ids.includes(id));
+        return [...filtered, ...newIds];
+      });
+    }
+  }, [groupedExercises, selectedDate]);
+
+  // Reorder groupedExercises according to exerciseOrder
+  const orderedExercises = useMemo(() => {
+    if (exerciseOrder.length === 0) return groupedExercises;
+    const map = new Map(groupedExercises.map((g) => [g.exerciseId, g]));
+    const ordered = exerciseOrder.map((id) => map.get(id)).filter(Boolean) as typeof groupedExercises;
+    // Append any groups not in exerciseOrder (safety fallback)
+    const inOrder = new Set(exerciseOrder);
+    groupedExercises.forEach((g) => { if (!inOrder.has(g.exerciseId)) ordered.push(g); });
+    return ordered;
+  }, [groupedExercises, exerciseOrder]);
+
+  // Drag end handler: reorder locally and persist via createdAt updates
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = exerciseOrder.indexOf(active.id as string);
+    const newIndex = exerciseOrder.indexOf(over.id as string);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newOrder = arrayMove(exerciseOrder, oldIndex, newIndex);
+    setExerciseOrder(newOrder);
+
+    // Persist order by updating createdAt of each group's representative set.
+    // Firestore query is orderBy('createdAt', 'desc'), so first in UI = highest createdAt.
+    // We find the minimum createdAt set for each group (representative) and assign
+    // new timestamps spaced 1ms apart in descending order.
+    const now = Date.now();
+    const map = new Map(groupedExercises.map((g) => [g.exerciseId, g]));
+    const updatePromises: Promise<void>[] = [];
+    newOrder.forEach((exerciseId, i) => {
+      const group = map.get(exerciseId);
+      if (!group) return;
+      // Representative set: the one with the smallest createdAt (first added)
+      const rep = group.sets.reduce((a, b) => (a.createdAt < b.createdAt ? a : b));
+      // Assign timestamps: index 0 gets highest (most recent), so subtract i ms
+      const targetTs = now - i;
+      if (rep.createdAt !== targetTs) {
+        updatePromises.push(onUpdateSet(rep.id, { createdAt: targetTs }));
+      }
+    });
+    await Promise.all(updatePromises);
+  };
 
   // Combined built-in + custom exercises list for autosuggest
   const allAvailableExercises = useMemo(() => {
@@ -739,11 +880,10 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
         </div>
       ) : (
         <>
-          {groupedExercises.map((group) => (
-            <div
-              key={group.exerciseId}
-              className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3"
-            >
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={exerciseOrder} strategy={verticalListSortingStrategy}>
+          {orderedExercises.map((group) => (
+            <SortableExerciseCard key={group.exerciseId} id={group.exerciseId}>
               {/* Exercise Header */}
               <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
                 <div>
@@ -756,14 +896,17 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                     )}
                   </h3>
                 </div>
-                <button
-                  onClick={() => onDeleteExerciseFromDate(group.exerciseId)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-700/50 transition"
-                  title="Delete exercise from this date"
-                  aria-label="Delete Exercise"
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <ExerciseCardDragHandle />
+                  <button
+                    onClick={() => onDeleteExerciseFromDate(group.exerciseId)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-700/50 transition"
+                    title="Delete exercise from this date"
+                    aria-label="Delete Exercise"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
 
               {/* Combined, time-ordered list of sets and rest timers */}
@@ -852,8 +995,10 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                   Add Rest
                 </button>
               </div>
-            </div>
+            </SortableExerciseCard>
           ))}
+            </SortableContext>
+          </DndContext>
 
           {/* Save as Template Button at the bottom of Workout Page */}
           <div className="pt-2">
