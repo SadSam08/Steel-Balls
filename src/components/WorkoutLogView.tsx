@@ -354,6 +354,7 @@ const SortableExerciseCard: React.FC<SortableExerciseCardProps> = ({ id, childre
 };
 
 export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
+  currentUserId,
   selectedDate,
   onSelectDate,
   allSets,
