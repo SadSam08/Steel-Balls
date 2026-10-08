@@ -150,7 +150,9 @@ export function App() {
     isBodyweight: boolean,
     weight: number,
     reps: number,
-    isPR: boolean
+    isPR: boolean,
+    isStatic?: boolean,
+    note?: string
   ) => {
     try {
       await addWorkoutSet(currentUser.uid, {
@@ -158,15 +160,17 @@ export function App() {
         exerciseId,
         exerciseName,
         isBodyweight,
+        isStatic,
         weight,
         reps,
         bodyweightAtTime: userProfile.bodyweight || 0,
         isPR,
         createdAt: Date.now(),
+        note,
       });
     } catch {
       showToast('error', 'Failed to add set. Click to retry.', () =>
-        handleAddSet(exerciseId, exerciseName, isBodyweight, weight, reps, isPR)
+        handleAddSet(exerciseId, exerciseName, isBodyweight, weight, reps, isPR, isStatic, note)
       );
     }
   };
@@ -196,8 +200,8 @@ export function App() {
     }
   };
 
-  const handleAddCustomExercise = async (name: string, isBodyweight: boolean) => {
-    return await createCustomExercise(currentUser.uid, name, isBodyweight);
+  const handleAddCustomExercise = async (name: string, isBodyweight: boolean, isStatic?: boolean) => {
+    return await createCustomExercise(currentUser.uid, name, isBodyweight, isStatic);
   };
 
   const handleSaveTemplate = async (
@@ -259,6 +263,7 @@ export function App() {
 
         {activeTab === 'workout' && (
           <WorkoutLogView
+            currentUserId={currentUser.uid}
             selectedDate={selectedDate}
             onSelectDate={(dateStr) => setSelectedDate(dateStr)}
             allSets={allSets}
@@ -289,6 +294,7 @@ export function App() {
             onUpdateSet={handleUpdateSet}
             onDeleteSet={handleDeleteSet}
             onAddCustomExercise={handleAddCustomExercise}
+            onUpdateProfile={handleUpdateProfile}
             onError={(msg) => showToast('error', msg)}
             onSuccess={(msg) => showToast('success', msg)}
           />

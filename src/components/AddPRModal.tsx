@@ -18,7 +18,7 @@ interface AddPRModalProps {
   customExercises: CustomExercise[];
   bodyweightLogs: BodyweightLogEntry[];
   onAddSet: (setData: Omit<SetItem, 'id'>) => Promise<void>;
-  onAddCustomExercise: (name: string, isBodyweight: boolean) => Promise<CustomExercise>;
+  onAddCustomExercise: (name: string, isBodyweight: boolean, isStatic?: boolean) => Promise<CustomExercise>;
   onSuccess: (msg: string) => void;
 }
 
@@ -40,6 +40,7 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customIsBodyweight, setCustomIsBodyweight] = useState(false);
+  const [customIsStatic, setCustomIsStatic] = useState(false);
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
 
   // Set values (strings while typing)
@@ -84,11 +85,16 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
     if (!customName.trim()) return;
     setIsCreatingCustom(true);
     try {
-      const created = await onAddCustomExercise(customName.trim(), customIsBodyweight);
+      const created = await onAddCustomExercise(
+        customName.trim(),
+        customIsBodyweight || customIsStatic,
+        customIsStatic
+      );
       handleSelectExercise(created);
       setShowCustomForm(false);
       setCustomName('');
       setCustomIsBodyweight(false);
+      setCustomIsStatic(false);
     } catch {
       setInlineError('Failed to create custom exercise. Please try again.');
     } finally {
@@ -112,10 +118,14 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
       return;
     }
 
-    // Validate reps
+    // Validate reps / duration
     const parsedReps = parseInt(repsStr.trim(), 10);
     if (repsStr.trim() === '' || isNaN(parsedReps) || parsedReps < 1 || String(parsedReps) !== repsStr.trim()) {
-      setInlineError('Reps must be a whole number ≥ 1.');
+      setInlineError(
+        selectedExercise.isStatic
+          ? 'Time must be a whole number of seconds ≥ 1.'
+          : 'Reps must be a whole number ≥ 1.'
+      );
       return;
     }
 
@@ -134,6 +144,7 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
         exerciseId: selectedExercise.id,
         exerciseName: selectedExercise.name,
         isBodyweight: selectedExercise.isBodyweight,
+        isStatic: Boolean(selectedExercise.isStatic),
         weight: parsedWeight,
         reps: parsedReps,
         bodyweightAtTime,
@@ -259,15 +270,29 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
                 onChange={(e) => setCustomName(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none"
               />
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={customIsBodyweight}
-                  onChange={(e) => setCustomIsBodyweight(e.target.checked)}
-                  className="w-4 h-4 rounded text-cyan-500 bg-slate-900 border-slate-700"
-                />
-                <span className="text-xs text-slate-300 font-medium">Bodyweight exercise</span>
-              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customIsBodyweight}
+                    onChange={(e) => setCustomIsBodyweight(e.target.checked)}
+                    className="w-4 h-4 rounded text-cyan-500 bg-slate-900 border-slate-700"
+                  />
+                  <span className="text-xs text-slate-300 font-medium">Bodyweight exercise</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customIsStatic}
+                    onChange={(e) => {
+                      setCustomIsStatic(e.target.checked);
+                      if (e.target.checked) setCustomIsBodyweight(true);
+                    }}
+                    className="w-4 h-4 rounded text-cyan-500 bg-slate-900 border-slate-700"
+                  />
+                  <span className="text-xs text-slate-300 font-medium">Static (time-based hold)</span>
+                </label>
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowCustomForm(false)}
@@ -307,11 +332,13 @@ export const AddPRModal: React.FC<AddPRModalProps> = ({
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-300 block mb-1.5">Reps</label>
+              <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                {selectedExercise?.isStatic ? 'Time (seconds)' : 'Reps'}
+              </label>
               <input
                 type="text"
                 inputMode="numeric"
-                placeholder="e.g. 5"
+                placeholder={selectedExercise?.isStatic ? 'e.g. 15' : 'e.g. 5'}
                 value={repsStr}
                 onChange={(e) => {
                   setRepsStr(e.target.value);

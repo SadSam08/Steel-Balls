@@ -11,7 +11,25 @@ import {
   Plus,
   Trash2,
   Edit3,
+  GripVertical,
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   LineChart,
   Line,
@@ -21,15 +39,84 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import type { SetItem, CustomExercise, UserProfile, BodyweightLogEntry } from '../types';
+import type { SetItem, CustomExercise, UserProfile, BodyweightLogEntry, CurrentPRGroup } from '../types';
 import {
   computeCurrentPRs,
   findAutoPRCandidate,
   getChartDataForExerciseReps,
 } from '../utils/prUtils';
-import { formatWeight } from '../utils/unitUtils';
+import { formatWeight, formatTime } from '../utils/unitUtils';
 import { formatDateLabel, getTodayString } from '../utils/dateUtils';
 import { AddPRModal } from './AddPRModal';
+
+class SmartPointerSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: 'onPointerDown' as const,
+      handler: (
+        { nativeEvent: event }: React.PointerEvent,
+        { onActivation }: any
+      ) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('input, textarea, select, button, [data-no-drag]')) {
+          return false;
+        }
+        return true;
+      },
+    },
+  ];
+}
+
+class SmartTouchSensor extends TouchSensor {
+  static activators = [
+    {
+      eventName: 'onTouchStart' as const,
+      handler: (
+        { nativeEvent: event }: React.TouchEvent,
+        { onActivation }: any
+      ) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('input, textarea, select, button, [data-no-drag]')) {
+          return false;
+        }
+        return true;
+      },
+    },
+  ];
+}
+
+interface SortablePRCardProps {
+  id: string;
+  children: React.ReactNode;
+  onClick?: () => void;
+}
+
+const SortablePRCard: React.FC<SortablePRCardProps> = ({ id, children, onClick }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.9 : 1,
+        scale: isDragging ? '1.02' : '1',
+        boxShadow: isDragging ? '0 20px 25px -5px rgba(0, 0, 0, 0.5)' : undefined,
+        touchAction: 'manipulation',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+      }}
+      onClick={onClick}
+      {...attributes}
+      {...listeners}
+      className={`bg-slate-800/90 border ${isDragging ? 'border-cyan-500/50' : 'border-slate-700/80'} rounded-2xl p-4 shadow-xl flex items-center justify-between cursor-pointer group transition active:scale-[0.99] relative ${isDragging ? 'z-50' : 'z-10'}`}
+    >
+      {children}
+    </div>
+  );
+};
 
 interface PRTabProps {
   allSets: SetItem[];
@@ -40,6 +127,7 @@ interface PRTabProps {
   onUpdateSet: (setId: string, updates: Partial<SetItem>) => Promise<void>;
   onDeleteSet: (setId: string) => Promise<void>;
   onAddCustomExercise: (name: string, isBodyweight: boolean) => Promise<CustomExercise>;
+  onUpdateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   onError: (msg: string) => void;
   onSuccess: (msg: string) => void;
 }
@@ -53,6 +141,7 @@ export const PRTab: React.FC<PRTabProps> = ({
   onUpdateSet,
   onDeleteSet,
   onAddCustomExercise,
+  onUpdateProfile,
   onError,
   onSuccess,
 }) => {
@@ -85,15 +174,98 @@ export const PRTab: React.FC<PRTabProps> = ({
   // Confirm delete state
   const [deletingSetId, setDeletingSetId] = useState<string | null>(null);
 
+  // Manual order state for Current PRs drag-to-reorder (persisted in Firestore)
+  const manualOrder = userProfile.prCardOrder || [];
+
+  // dnd-kit sensors (pointer + touch)
+  const sensors = useSensors(
+    useSensor(SmartPointerSensor, {
+      activationConstraint: { delay: 250, tolerance: 8 },
+    }),
+    useSensor(SmartTouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor)
+  );
+
+  const getCardKey = (prGroup: CurrentPRGroup) => `${prGroup.exerciseId}_${prGroup.bestSet.id}`;
+
   // Compute Current PRs dynamically from allSets
   const currentPRs = useMemo(() => computeCurrentPRs(allSets), [allSets]);
 
-  // Compute History PRs sorted newest first, grouped by exercise
+  // Current PRs ordered list:
+  // - Default order: newest PR first (by date desc, then createdAt desc)
+  // - Manual drag order overrides default for touched exercises
+  // - Any new PR exercise not yet in manual order is inserted at the TOP (newest first)
+  const orderedCurrentPRs = useMemo(() => {
+    const defaultSorted = [...currentPRs].sort((a, b) => {
+      const dateCmp = (b.bestSet.date || '').localeCompare(a.bestSet.date || '');
+      if (dateCmp !== 0) return dateCmp;
+      return (b.bestSet.createdAt || 0) - (a.bestSet.createdAt || 0);
+    });
+
+    if (manualOrder.length === 0) {
+      return defaultSorted;
+    }
+
+    const isKnown = (group: CurrentPRGroup) => {
+      const cardKey = getCardKey(group);
+      return manualOrder.includes(cardKey) || manualOrder.includes(group.exerciseId);
+    };
+
+    const knownGroups = defaultSorted.filter((g) => isKnown(g));
+    const newGroups = defaultSorted.filter((g) => !isKnown(g));
+
+    // Sort known groups according to their position in manualOrder
+    knownGroups.sort((a, b) => {
+      const keyA = getCardKey(a);
+      const keyB = getCardKey(b);
+      let idxA = manualOrder.indexOf(keyA);
+      if (idxA === -1) idxA = manualOrder.indexOf(a.exerciseId);
+      let idxB = manualOrder.indexOf(keyB);
+      if (idxB === -1) idxB = manualOrder.indexOf(b.exerciseId);
+      return idxA - idxB;
+    });
+
+    // newGroups (new PRs) stay sorted newest-first and are placed at the TOP
+    return [...newGroups, ...knownGroups];
+  }, [currentPRs, manualOrder]);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const currentKeys = orderedCurrentPRs.map(getCardKey);
+    const oldIndex = currentKeys.indexOf(active.id as string);
+    const newIndex = currentKeys.indexOf(over.id as string);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newKeys = arrayMove(currentKeys, oldIndex, newIndex);
+    
+    // Save to Firestore using onUpdateProfile
+    onUpdateProfile({ prCardOrder: newKeys });
+  };
+
+  // Compute History PRs sorted strictly newest first by date, grouped by exercise (fixed, NOT draggable)
   const historyPRsGrouped = useMemo(() => {
     const prSets = allSets.filter((s) => s.isPR);
-    prSets.sort((a, b) => b.createdAt - a.createdAt || b.date.localeCompare(a.date));
+    // Sort all PR sets strictly by date desc, then createdAt desc
+    prSets.sort(
+      (a, b) =>
+        (b.date || '').localeCompare(a.date || '') || b.createdAt - a.createdAt
+    );
 
-    const map = new Map<string, { exerciseName: string; isBodyweight: boolean; sets: SetItem[] }>();
+    const map = new Map<
+      string,
+      {
+        exerciseName: string;
+        isBodyweight: boolean;
+        sets: SetItem[];
+        maxDate: string;
+        maxCreatedAt: number;
+      }
+    >();
 
     for (const set of prSets) {
       if (!map.has(set.exerciseId)) {
@@ -101,20 +273,47 @@ export const PRTab: React.FC<PRTabProps> = ({
           exerciseName: set.exerciseName,
           isBodyweight: set.isBodyweight,
           sets: [set],
+          maxDate: set.date || '',
+          maxCreatedAt: set.createdAt || 0,
         });
       } else {
-        map.get(set.exerciseId)!.sets.push(set);
+        const entry = map.get(set.exerciseId)!;
+        entry.sets.push(set);
+        if (
+          (set.date || '').localeCompare(entry.maxDate || '') > 0 ||
+          (set.date === entry.maxDate && set.createdAt > entry.maxCreatedAt)
+        ) {
+          entry.maxDate = set.date || '';
+          entry.maxCreatedAt = set.createdAt || 0;
+        }
       }
     }
 
-    return Array.from(map.values());
+    const groups = Array.from(map.values());
+    // Sort exercise groups by their newest PR date desc, then maxCreatedAt desc
+    groups.sort(
+      (a, b) =>
+        (b.maxDate || '').localeCompare(a.maxDate || '') ||
+        b.maxCreatedAt - a.maxCreatedAt
+    );
+
+    // Sort sets inside each group strictly by date desc, then createdAt desc
+    groups.forEach((g) => {
+      g.sets.sort(
+        (a, b) =>
+          (b.date || '').localeCompare(a.date || '') ||
+          b.createdAt - a.createdAt
+      );
+    });
+
+    return groups;
   }, [allSets]);
 
-  // All unique exercise IDs in user's sets history for Auto-PR scanning
+  // All unique exercise IDs in user's sets history for Auto-PR scanning (excluding statics)
   const uniqueExercises = useMemo(() => {
     const map = new Map<string, { exerciseId: string; exerciseName: string }>();
     allSets.forEach((s) => {
-      if (!map.has(s.exerciseId)) {
+      if (!s.isStatic && !map.has(s.exerciseId)) {
         map.set(s.exerciseId, { exerciseId: s.exerciseId, exerciseName: s.exerciseName });
       }
     });
@@ -283,7 +482,7 @@ export const PRTab: React.FC<PRTabProps> = ({
       {/* Current PRs View */}
       {prView === 'current' && (
         <div className="space-y-3">
-          {currentPRs.length === 0 ? (
+          {orderedCurrentPRs.length === 0 ? (
             <div className="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-8 text-center space-y-3">
               <Trophy className="w-12 h-12 text-slate-500 mx-auto" />
               <h3 className="text-sm font-semibold text-slate-300">No PRs marked yet</h3>
@@ -292,51 +491,63 @@ export const PRTab: React.FC<PRTabProps> = ({
               </p>
             </div>
           ) : (
-            currentPRs.map((prGroup) => (
-              <div
-                key={`${prGroup.exerciseId}_${prGroup.bestSet.id}`}
-                onClick={() =>
-                  setChartSelection({
-                    exerciseId: prGroup.exerciseId,
-                    exerciseName: prGroup.exerciseName,
-                    reps: prGroup.reps,
-                    isBodyweight: prGroup.isBodyweight,
-                  })
-                }
-                className="bg-slate-800/90 border border-slate-700/80 hover:border-cyan-500/50 rounded-2xl p-4 shadow-xl flex items-center justify-between cursor-pointer group transition active:scale-[0.99]"
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext
+                items={orderedCurrentPRs.map(getCardKey)}
+                strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-bold text-white group-hover:text-cyan-400 transition">
-                      {prGroup.exerciseName}
-                    </h4>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
-                      {prGroup.reps} {prGroup.reps === 1 ? 'rep' : 'reps'}
-                    </span>
-                  </div>
+                {orderedCurrentPRs.map((prGroup) => {
+                  const cardKey = getCardKey(prGroup);
+                  return (
+                    <SortablePRCard
+                      key={cardKey}
+                      id={cardKey}
+                      onClick={() =>
+                        setChartSelection({
+                          exerciseId: prGroup.exerciseId,
+                          exerciseName: prGroup.exerciseName,
+                          reps: prGroup.reps,
+                          isBodyweight: prGroup.isBodyweight,
+                        })
+                      }
+                    >
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-white group-hover:text-cyan-400 transition">
+                            {prGroup.exerciseName}
+                          </h4>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
+                            {prGroup.isStatic
+                              ? formatTime(prGroup.reps)
+                              : `${prGroup.reps} ${prGroup.reps === 1 ? 'rep' : 'reps'}`}
+                          </span>
+                        </div>
 
-                  <p className="text-base font-extrabold text-cyan-400">
-                    {formatWeight(
-                      prGroup.bestSet.weight,
-                      userProfile.unit,
-                      prGroup.isBodyweight
-                    )}
-                  </p>
+                        <p className="text-base font-extrabold text-cyan-400">
+                          {formatWeight(
+                            prGroup.bestSet.weight,
+                            userProfile.unit,
+                            prGroup.isBodyweight
+                          )}
+                        </p>
 
-                  <p className="text-[10px] text-slate-400 flex items-center gap-2">
-                    <span>{formatDateLabel(prGroup.bestSet.date)}</span>
-                    {prGroup.isBodyweight && prGroup.bestSet.bodyweightAtTime > 0 && (
-                      <span>• Total Load: {prGroup.totalLoad} {userProfile.unit}</span>
-                    )}
-                  </p>
-                </div>
+                        <p className="text-[10px] text-slate-400 flex items-center gap-2">
+                          <span>{formatDateLabel(prGroup.bestSet.date)}</span>
+                          {prGroup.isBodyweight && prGroup.bestSet.bodyweightAtTime > 0 && (
+                            <span>• Total Load: {prGroup.totalLoad} {userProfile.unit}</span>
+                          )}
+                        </p>
+                      </div>
 
-                <div className="flex items-center gap-2 text-slate-400 group-hover:text-cyan-400">
-                  <TrendingUp size={18} />
-                  <ChevronRight size={18} />
-                </div>
-              </div>
-            ))
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <TrendingUp size={18} className="group-hover:text-cyan-400" />
+                        <ChevronRight size={18} className="group-hover:text-cyan-400" />
+                      </div>
+                    </SortablePRCard>
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       )}
@@ -449,7 +660,9 @@ export const PRTab: React.FC<PRTabProps> = ({
                           <div>
                             <p className="font-bold text-cyan-400">
                               {formatWeight(set.weight, userProfile.unit, grp.isBodyweight)} ×{' '}
-                              {set.reps} {set.reps === 1 ? 'rep' : 'reps'}
+                              {set.isStatic
+                                ? formatTime(set.reps)
+                                : `${set.reps} ${set.reps === 1 ? 'rep' : 'reps'}`}
                             </p>
                             <p className="text-[10px] text-slate-400 mt-0.5">
                               {formatDateLabel(set.date)}

@@ -102,6 +102,7 @@ export function computeCurrentPRs(allSets: SetItem[]): CurrentPRGroup[] {
         exerciseId: bestSet.exerciseId,
         exerciseName: bestSet.exerciseName,
         isBodyweight: bestSet.isBodyweight,
+        isStatic: Boolean(bestSet.isStatic),
         reps: bestSet.reps,
         bestSet,
         totalLoad: calculateTotalLoad(bestSet),
@@ -109,12 +110,14 @@ export function computeCurrentPRs(allSets: SetItem[]): CurrentPRGroup[] {
     }
   });
 
-  // Sort by exercise name ascending, then reps ascending
+  // Sort default: newest PR date first, then newest createdAt, then exercise name
   results.sort((a, b) => {
-    if (a.exerciseName !== b.exerciseName) {
-      return a.exerciseName.localeCompare(b.exerciseName);
+    const dateCmp = (b.bestSet.date || '').localeCompare(a.bestSet.date || '');
+    if (dateCmp !== 0) return dateCmp;
+    if (b.bestSet.createdAt !== a.bestSet.createdAt) {
+      return b.bestSet.createdAt - a.bestSet.createdAt;
     }
-    return a.reps - b.reps;
+    return a.exerciseName.localeCompare(b.exerciseName);
   });
 
   return results;
@@ -125,6 +128,8 @@ export function computeCurrentPRs(allSets: SetItem[]): CurrentPRGroup[] {
  */
 export function findAutoPRCandidate(allSetsForExercise: SetItem[]): { set: SetItem; estimated1RM: number } | null {
   if (!allSetsForExercise.length) return null;
+  // Epley 1RM auto-detect does not apply to static (time-based) exercises
+  if (allSetsForExercise.some((s) => s.isStatic)) return null;
 
   let bestCandidate: SetItem | null = null;
   let maxEst = -1;

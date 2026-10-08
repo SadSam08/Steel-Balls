@@ -64,5 +64,13 @@
   { "id": "cable-woodchopper", "name": "Cable Woodchopper", "isBodyweight": false },
   { "id": "farmer-walk", "name": "Farmer's Walk", "isBodyweight": false },
   { "id": "hyperextension", "name": "Back Extension / Hyperextension", "isBodyweight": true },
-  { "id": "nordic-curl", "name": "Nordic Hamstring Curl", "isBodyweight": true }
+  { "id": "nordic-curl", "name": "Nordic Hamstring Curl", "isBodyweight": true },
+
+  { "id": "front-lever", "name": "Front Lever", "isBodyweight": true, "isStatic": true },
+  { "id": "planche", "name": "Planche", "isBodyweight": true, "isStatic": true },
+  { "id": "l-sit", "name": "L-Sit", "isBodyweight": true, "isStatic": true },
+  { "id": "handstand", "name": "Handstand", "isBodyweight": true, "isStatic": true },
+  { "id": "wall-sit", "name": "Wall Sit", "isBodyweight": true, "isStatic": true },
+  { "id": "back-lever", "name": "Back Lever", "isBodyweight": true, "isStatic": true },
+  { "id": "human-flag", "name": "Human Flag", "isBodyweight": true, "isStatic": true }
 ]

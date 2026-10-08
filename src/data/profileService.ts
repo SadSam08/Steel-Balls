@@ -36,6 +36,7 @@ export function subscribeUserProfile(
         age: Number(data.age ?? DEFAULT_PROFILE.age),
         gender: String(data.gender ?? DEFAULT_PROFILE.gender),
         unit: (data.unit as 'kg' | 'lb') || DEFAULT_PROFILE.unit,
+        prCardOrder: Array.isArray(data.prCardOrder) ? data.prCardOrder : [],
       });
     } else {
       setDoc(profileRef, DEFAULT_PROFILE).catch((err) =>

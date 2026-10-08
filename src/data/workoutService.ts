@@ -35,11 +35,13 @@ export function subscribeToUserSets(
           exerciseId: data.exerciseId,
           exerciseName: data.exerciseName || data.exerciseId,
           isBodyweight: Boolean(data.isBodyweight),
+          isStatic: Boolean(data.isStatic),
           weight: Number(data.weight || 0),
           reps: Number(data.reps || 1),
           bodyweightAtTime: Number(data.bodyweightAtTime || 0),
           isPR: Boolean(data.isPR),
           createdAt: data.createdAt || Date.now(),
+          note: data.note || '',
         };
       });
       onUpdate(sets);
@@ -66,6 +68,7 @@ export function subscribeToCustomExercises(
         id: docSnap.id,
         name: data.name,
         isBodyweight: Boolean(data.isBodyweight),
+        isStatic: Boolean(data.isStatic),
       };
     });
     onUpdate(custom);
@@ -81,17 +84,21 @@ export async function addWorkoutSet(
 ): Promise<string> {
   const setsRef = collection(db, 'users', uid, 'sets');
   const newDocRef = doc(setsRef);
-  const payload = {
+  const payload: Record<string, any> = {
     date: setData.date,
     exerciseId: setData.exerciseId,
     exerciseName: setData.exerciseName,
-    isBodyweight: setData.isBodyweight,
+    isBodyweight: Boolean(setData.isBodyweight),
+    isStatic: Boolean(setData.isStatic),
     weight: setData.weight,
     reps: setData.reps,
     bodyweightAtTime: setData.bodyweightAtTime,
     isPR: setData.isPR,
     createdAt: setData.createdAt || Date.now(),
   };
+  if (setData.note) {
+    payload.note = setData.note;
+  }
 
   await setDoc(newDocRef, payload);
   return newDocRef.id;
@@ -107,6 +114,26 @@ export async function updateWorkoutSet(
 ): Promise<void> {
   const setRef = doc(db, 'users', uid, 'sets', setId);
   await updateDoc(setRef, updates as Record<string, any>);
+}
+
+/**
+ * Updates note for all sets of an exercise on a specific date.
+ */
+export async function updateExerciseNoteForDate(
+  uid: string,
+  exerciseId: string,
+  date: string,
+  note: string
+): Promise<void> {
+  const setsRef = collection(db, 'users', uid, 'sets');
+  const q = query(setsRef, where('date', '==', date), where('exerciseId', '==', exerciseId));
+  const snapshot = await getDocs(q);
+
+  const trimmed = note.trim();
+  const updatePromises = snapshot.docs.map((docSnap) =>
+    updateDoc(docSnap.ref, { note: trimmed })
+  );
+  await Promise.all(updatePromises);
 }
 
 /**
@@ -139,17 +166,54 @@ export async function deleteExerciseSetsFromDate(
 export async function createCustomExercise(
   uid: string,
   name: string,
-  isBodyweight: boolean
+  isBodyweight: boolean,
+  isStatic?: boolean
 ): Promise<CustomExercise> {
   const customRef = collection(db, 'users', uid, 'customExercises');
   const newDocRef = doc(customRef);
   const id = `custom_${newDocRef.id}`;
   const customDocRef = doc(db, 'users', uid, 'customExercises', id);
 
-  const payload = { name, isBodyweight };
+  const payload = { name, isBodyweight, isStatic: Boolean(isStatic) };
   await setDoc(customDocRef, payload);
 
-  return { id, name, isBodyweight };
+  return { id, name, isBodyweight, isStatic: Boolean(isStatic) };
+}
+
+/**
+ * Subscribes to real-time session notes for a given date from users/{uid}/dayNotes/{date}.
+ */
+export function subscribeDayNote(
+  uid: string,
+  date: string,
+  onUpdate: (note: string) => void
+) {
+  const noteRef = doc(db, 'users', uid, 'dayNotes', date);
+  return onSnapshot(noteRef, (snap) => {
+    if (snap.exists()) {
+      onUpdate(snap.data().text || '');
+    } else {
+      onUpdate('');
+    }
+  });
+}
+
+/**
+ * Saves session notes for a given date in users/{uid}/dayNotes/{date}.
+ * If text is empty, removes the document so no empty document is left.
+ */
+export async function saveDayNote(
+  uid: string,
+  date: string,
+  text: string
+): Promise<void> {
+  const noteRef = doc(db, 'users', uid, 'dayNotes', date);
+  const trimmed = text.trim();
+  if (!trimmed) {
+    await deleteDoc(noteRef);
+  } else {
+    await setDoc(noteRef, { text: trimmed, updatedAt: Date.now() }, { merge: true });
+  }
 }
 
 /**

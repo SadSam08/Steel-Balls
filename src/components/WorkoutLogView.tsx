@@ -13,6 +13,7 @@ import {
   Hourglass,
   Square,
   GripVertical,
+  FileText,
 } from 'lucide-react';
 import {
   DndContext,
@@ -40,6 +41,48 @@ import type {
 } from '../types';
 import builtInExercises from '../data/builtInExercises.json';
 import { formatDateLabel, getTodayString } from '../utils/dateUtils';
+import {
+  subscribeDayNote,
+  saveDayNote,
+  updateExerciseNoteForDate,
+} from '../data/workoutService';
+import { formatTime } from '../utils/unitUtils';
+
+class SmartPointerSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: 'onPointerDown' as const,
+      handler: (
+        { nativeEvent: event }: React.PointerEvent,
+        { onActivation }: any
+      ) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('input, textarea, select, button, [data-no-drag]')) {
+          return false;
+        }
+        return true;
+      },
+    },
+  ];
+}
+
+class SmartTouchSensor extends TouchSensor {
+  static activators = [
+    {
+      eventName: 'onTouchStart' as const,
+      handler: (
+        { nativeEvent: event }: React.TouchEvent,
+        { onActivation }: any
+      ) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('input, textarea, select, button, [data-no-drag]')) {
+          return false;
+        }
+        return true;
+      },
+    },
+  ];
+}
 
 interface RestTimerItem {
   id: string;
@@ -123,6 +166,7 @@ const RestTimerRow: React.FC<RestTimerRowProps> = ({
 };
 
 interface WorkoutLogViewProps {
+  currentUserId: string;
   selectedDate: string;
   onSelectDate: (dateStr: string) => void;
   allSets: SetItem[];
@@ -135,12 +179,14 @@ interface WorkoutLogViewProps {
     isBodyweight: boolean,
     weight: number,
     reps: number,
-    isPR: boolean
+    isPR: boolean,
+    isStatic?: boolean,
+    note?: string
   ) => Promise<void>;
   onUpdateSet: (setId: string, updates: Partial<SetItem>) => Promise<void>;
   onDeleteSet: (setId: string) => Promise<void>;
   onDeleteExerciseFromDate: (exerciseId: string) => Promise<void>;
-  onAddCustomExercise: (name: string, isBodyweight: boolean) => Promise<CustomExercise>;
+  onAddCustomExercise: (name: string, isBodyweight: boolean, isStatic?: boolean) => Promise<CustomExercise>;
   onSaveTemplate?: (
     name: string,
     exercises: TemplateExercise[],
@@ -237,7 +283,7 @@ const SetRowItem: React.FC<SetRowItemProps> = ({
         <input
           type="text"
           inputMode="numeric"
-          placeholder="0"
+          placeholder={set.isStatic ? '0s' : '0'}
           value={repsStr}
           onChange={(e) => setRepsStr(e.target.value)}
           onBlur={commitReps}
@@ -281,47 +327,29 @@ interface SortableExerciseCardProps {
   children: React.ReactNode;
 }
 
-// Context to pass drag handle props into the card's header
-const SortableDragHandleContext = React.createContext<{
-  attributes: React.HTMLAttributes<HTMLElement>;
-  listeners: Record<string, React.EventHandler<any>> | undefined;
-} | null>(null);
-
 const SortableExerciseCard: React.FC<SortableExerciseCardProps> = ({ id, children }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
 
   return (
-    <SortableDragHandleContext.Provider value={{ attributes, listeners }}>
-      <div
-        ref={setNodeRef}
-        style={{
-          transform: CSS.Transform.toString(transform),
-          transition,
-          opacity: isDragging ? 0.5 : 1,
-        }}
-        className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3"
-      >
-        {children}
-      </div>
-    </SortableDragHandleContext.Provider>
-  );
-};
-
-// Drag handle that consumes the SortableDragHandleContext — must be a proper component to use useContext
-const ExerciseCardDragHandle: React.FC = () => {
-  const dragHandle = React.useContext(SortableDragHandleContext);
-  if (!dragHandle) return null;
-  return (
-    <button
-      {...dragHandle.attributes}
-      {...dragHandle.listeners}
-      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 cursor-grab active:cursor-grabbing touch-none transition"
-      aria-label="Drag to reorder"
-      title="Drag to reorder"
-      tabIndex={-1}
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.9 : 1,
+        scale: isDragging ? '1.02' : '1',
+        boxShadow: isDragging ? '0 20px 25px -5px rgba(0, 0, 0, 0.5)' : undefined,
+        touchAction: 'manipulation',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+      }}
+      {...attributes}
+      {...listeners}
+      className={`bg-slate-800/90 border ${isDragging ? 'border-cyan-500/50' : 'border-slate-700/80'} rounded-2xl p-4 shadow-xl space-y-3 relative ${isDragging ? 'z-50' : 'z-10'}`}
     >
-      <GripVertical size={16} />
-    </button>
+      {children}
+    </div>
   );
 };
 
@@ -348,6 +376,23 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customIsBodyweight, setCustomIsBodyweight] = useState(false);
+  const [customIsStatic, setCustomIsStatic] = useState(false);
+
+  // Session Notes state
+  const [sessionNote, setSessionNote] = useState('');
+
+  // Exercise Notes local UI state
+  const [exerciseNotesInput, setExerciseNotesInput] = useState<Record<string, string>>({});
+  const [showNoteInput, setShowNoteInput] = useState<Record<string, boolean>>({});
+
+  // Subscribe to Session Notes for selectedDate
+  useEffect(() => {
+    if (!currentUserId || !selectedDate) return;
+    const unsub = subscribeDayNote(currentUserId, selectedDate, (note) => {
+      setSessionNote(note);
+    });
+    return () => unsub();
+  }, [currentUserId, selectedDate]);
 
   // Rest Timers local UI state
   const [restTimers, setRestTimers] = useState<RestTimerItem[]>([]);
@@ -366,8 +411,8 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
 
   // dnd-kit sensors (pointer + touch)
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+    useSensor(SmartPointerSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+    useSensor(SmartTouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } })
   );
 
   // Filter sets for selected date
@@ -382,6 +427,7 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
       exerciseId: string;
       exerciseName: string;
       isBodyweight: boolean;
+      isStatic: boolean;
       sets: SetItem[];
     }[] = [];
 
@@ -393,6 +439,7 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
           exerciseId: set.exerciseId,
           exerciseName: set.exerciseName,
           isBodyweight: set.isBodyweight,
+          isStatic: Boolean(set.isStatic),
           sets: [set],
         };
         map.set(set.exerciseId, grp);
@@ -537,7 +584,7 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
 
     try {
       const { weight, reps } = getPrefillValues(ex.id);
-      await onAddSet(ex.id, ex.name, ex.isBodyweight, weight, reps, false);
+      await onAddSet(ex.id, ex.name, ex.isBodyweight, weight, reps, false, ex.isStatic);
     } catch (err: any) {
       onError(err?.message || 'Failed to add exercise');
     }
@@ -550,7 +597,7 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
     setSearchQuery('');
     try {
       for (const ex of tpl.exercises) {
-        await onAddSet(ex.exerciseId, ex.name, ex.isBodyweight, 0, 0, false);
+        await onAddSet(ex.exerciseId, ex.name, ex.isBodyweight, 0, 0, false, ex.isStatic);
       }
       if (onSuccess) onSuccess(`Added template "${tpl.name}"!`);
     } catch (err: any) {
@@ -596,15 +643,20 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
   const handleCreateCustomExercise = async () => {
     if (!customName.trim()) return;
     try {
-      const created = await onAddCustomExercise(customName.trim(), customIsBodyweight);
+      const created = await onAddCustomExercise(
+        customName.trim(),
+        customIsBodyweight || customIsStatic,
+        customIsStatic
+      );
       setShowCustomModal(false);
       setCustomName('');
       setCustomIsBodyweight(false);
+      setCustomIsStatic(false);
       setSearchQuery('');
       setShowSearchDropdown(false);
 
       const { weight, reps } = getPrefillValues(created.id);
-      await onAddSet(created.id, created.name, created.isBodyweight, weight, reps, false);
+      await onAddSet(created.id, created.name, created.isBodyweight, weight, reps, false, created.isStatic);
     } catch (err: any) {
       onError(err?.message || 'Failed to create custom exercise');
     }
@@ -614,11 +666,12 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
   const handleQuickAddSet = async (
     exerciseId: string,
     exerciseName: string,
-    isBodyweight: boolean
+    isBodyweight: boolean,
+    isStatic?: boolean
   ) => {
     try {
       const { weight, reps } = getPrefillValues(exerciseId);
-      await onAddSet(exerciseId, exerciseName, isBodyweight, weight, reps, false);
+      await onAddSet(exerciseId, exerciseName, isBodyweight, weight, reps, false, isStatic);
     } catch (err: any) {
       onError(err?.message || 'Failed to add set');
     }
@@ -636,6 +689,7 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
       exerciseId: g.exerciseId,
       name: g.exerciseName,
       isBodyweight: g.isBodyweight,
+      isStatic: g.isStatic,
     }));
 
     setIsSavingTemplate(true);
@@ -889,15 +943,18 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                 <div>
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
                     {group.exerciseName}
-                    {group.isBodyweight && (
+                    {group.isStatic ? (
+                      <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        Static
+                      </span>
+                    ) : group.isBodyweight ? (
                       <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                         Bodyweight
                       </span>
-                    )}
+                    ) : null}
                   </h3>
                 </div>
                 <div className="flex items-center gap-1">
-                  <ExerciseCardDragHandle />
                   <button
                     onClick={() => onDeleteExerciseFromDate(group.exerciseId)}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-700/50 transition"
@@ -908,6 +965,47 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Exercise Note (per exercise per day) */}
+              {(() => {
+                const currentNote = group.sets.find((s) => Boolean(s.note))?.note || '';
+                const isOpen = showNoteInput[group.exerciseId] || Boolean(currentNote);
+                return (
+                  <div className="pt-2 border-b border-slate-700/40 pb-3">
+                    {isOpen ? (
+                      <div className="flex items-center gap-2">
+                        <FileText size={14} className="text-cyan-400 shrink-0" />
+                        <input
+                          type="text"
+                          value={exerciseNotesInput[group.exerciseId] ?? currentNote}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setExerciseNotesInput((prev) => ({
+                              ...prev,
+                              [group.exerciseId]: val,
+                            }));
+                          }}
+                          onBlur={() => {
+                            const val = exerciseNotesInput[group.exerciseId] ?? currentNote;
+                            updateExerciseNoteForDate(currentUserId, group.exerciseId, selectedDate, val);
+                          }}
+                          placeholder="Add note for this exercise (e.g. form felt great)..."
+                          className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 text-white text-xs placeholder-slate-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() =>
+                          setShowNoteInput((prev) => ({ ...prev, [group.exerciseId]: true }))
+                        }
+                        className="text-[11px] font-medium text-slate-400 hover:text-cyan-400 flex items-center gap-1 transition"
+                      >
+                        <FileText size={12} /> + Add note
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Combined, time-ordered list of sets and rest timers */}
               {(() => {
@@ -935,7 +1033,9 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                             ? `ADDED (${userProfile.unit})`
                             : `WEIGHT (${userProfile.unit})`}
                         </div>
-                        <div className="col-span-3 text-center">REPS</div>
+                        <div className="col-span-3 text-center">
+                          {group.isStatic ? 'TIME (s)' : 'REPS'}
+                        </div>
                         <div className="col-span-1 text-center">PR</div>
                         <div className="col-span-2 text-right">ACTION</div>
                       </div>
@@ -972,7 +1072,7 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
               <div className="flex items-center rounded-xl bg-slate-700/40 border border-dashed border-slate-600 overflow-hidden">
                 <button
                   onClick={() =>
-                    handleQuickAddSet(group.exerciseId, group.exerciseName, group.isBodyweight)
+                    handleQuickAddSet(group.exerciseId, group.exerciseName, group.isBodyweight, group.isStatic)
                   }
                   className="flex-1 py-2 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 border-r border-slate-600/60"
                 >
@@ -1013,6 +1113,22 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
               <BookmarkPlus size={18} />
               Save as Template
             </button>
+          </div>
+
+          {/* Session Notes (per day) */}
+          <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-2.5 mt-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-white">
+              <FileText size={16} className="text-cyan-400" />
+              Session Notes
+            </div>
+            <textarea
+              value={sessionNote}
+              onChange={(e) => setSessionNote(e.target.value)}
+              onBlur={() => saveDayNote(currentUserId, selectedDate, sessionNote)}
+              placeholder="How did today feel?"
+              rows={3}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs placeholder-slate-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none resize-none"
+            />
           </div>
         </>
       )}
@@ -1175,17 +1291,33 @@ export const WorkoutLogView: React.FC<WorkoutLogViewProps> = ({
                 />
               </div>
 
-              <label className="flex items-center gap-2.5 cursor-pointer pt-1">
-                <input
-                  type="checkbox"
-                  checked={customIsBodyweight}
-                  onChange={(e) => setCustomIsBodyweight(e.target.checked)}
-                  className="w-4 h-4 rounded text-cyan-500 focus:ring-cyan-500 bg-slate-900 border-slate-700"
-                />
-                <span className="text-xs font-medium text-slate-200">
-                  Is this a bodyweight exercise?
-                </span>
-              </label>
+              <div className="space-y-2 pt-1">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customIsBodyweight}
+                    onChange={(e) => setCustomIsBodyweight(e.target.checked)}
+                    className="w-4 h-4 rounded text-cyan-500 focus:ring-cyan-500 bg-slate-900 border-slate-700"
+                  />
+                  <span className="text-xs font-medium text-slate-200">
+                    Is this a bodyweight exercise?
+                  </span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customIsStatic}
+                    onChange={(e) => {
+                      setCustomIsStatic(e.target.checked);
+                      if (e.target.checked) setCustomIsBodyweight(true);
+                    }}
+                    className="w-4 h-4 rounded text-cyan-500 focus:ring-cyan-500 bg-slate-900 border-slate-700"
+                  />
+                  <span className="text-xs font-medium text-slate-200">
+                    Static (time-based hold)?
+                  </span>
+                </label>
+              </div>
             </div>
 
             <div className="flex gap-2 pt-2">
